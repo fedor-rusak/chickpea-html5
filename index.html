@@ -12,10 +12,17 @@
 		–––––––––––––––––––––––––––––––––––––––––––––––––– -->
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 
-		<script src="init.js" type="text/javascript"></script>
-		<script src="resources/chickpea.js" type="text/javascript"></script>
+		<script src="resources/jxcore/init.js" type="text/javascript"></script>
+		<script src="polyfill/promise.js" type="text/javascript"></script>
+		<script src="polyfill/rAF.js" type="text/javascript"></script>
+		<script src="polyfill/ie_console.js" type="text/javascript"></script>
+		<script src="lib/glMatrix.js" type="text/javascript"></script>
+		<script src="chickpea/engine_core.js" type="text/javascript"></script>
 	</head>
 
 	<body>
+		<div style="margin: 0 auto; width: 1400px;">
+			<canvas id="canvas" style="border: none; margin: 0 auto; width: 1400px;" width="1400" height="700"></canvas>
+		</div>
 	</body>
 </html>
