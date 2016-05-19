@@ -227,13 +227,12 @@ window.onload = function() {
 				var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
 				gl.uniformMatrix4fv(pMatrixUniform, false, pMatrix);
 
-				var vMatrix = webgl.vMatrix;
 				var mMatrix = mat4.create();
 				mat4.identity(mMatrix);
 				mat4.translate(mMatrix, [x || 0, y || 0, z || 0]);
 				// mat4.rotate(mMatrix, degToRad(45), [1, 0, 0]);
 				var mvMatrix = mat4.create();
-				mat4.multiply(vMatrix, mMatrix, mvMatrix);
+				mat4.multiply(webgl.vMatrix, mMatrix, mvMatrix);
 				var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
 				gl.uniformMatrix4fv(mvMatrixUniform, false, mvMatrix);
 
@@ -317,25 +316,32 @@ window.onload = function() {
 			gl.blendEquation( gl.FUNC_ADD );
 			gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
 
-			internalData.webgl = {"gl": gl, "textureProgram": textureProgram};
+			internalData.webgl = {"gl": gl, "textureProgram": textureProgram, "textures": {}};
 
 			nativeFunctions.setCamera(0,0,0);
 
-			var cachedTextureLabel = "explosion";
+			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
+				var imageData = internalData.imagesDataArray[i];
+				var cachedTextureLabel = imageData.label;
 
-			var glTexture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, glTexture);
-			// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, internalData.images[cachedTextureLabel]);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.bindTexture(gl.TEXTURE_2D, null);
+				var imageFormat = gl.RGB;
 
-			internalData.webgl.textures = {};
-			internalData.webgl.textures[cachedTextureLabel] = glTexture;
+				if (imageData.path.indexOf("with_alpha") > 0)
+					imageFormat = gl.RGBA;
+
+				var glTexture = gl.createTexture();
+				gl.bindTexture(gl.TEXTURE_2D, glTexture);
+				// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+				gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, internalData.images[cachedTextureLabel]);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.bindTexture(gl.TEXTURE_2D, null);
+
+				internalData.webgl.textures[cachedTextureLabel] = glTexture;
+			}
 
 			window.requestAnimationFrame(gameLoopCycle);
 		}
