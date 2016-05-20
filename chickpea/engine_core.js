@@ -233,6 +233,7 @@ window.onload = function() {
 				var model = squareModel;
 
 				gl.useProgram(program);
+				gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);gl.useProgram(program);
 
 				var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
 				gl.enableVertexAttribArray(vertexAttribute);
@@ -250,9 +251,9 @@ window.onload = function() {
 
 
 				var samplerUniform = gl.getUniformLocation(program, "uSampler");
-				gl.activeTexture(gl.TEXTURE0);
+				gl.activeTexture(gl.TEXTURE1);
 				gl.bindTexture(gl.TEXTURE_2D, webgl.textures[label]);
-				gl.uniform1i(samplerUniform, 0);
+				gl.uniform1i(samplerUniform, 1);
 
 
 				var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
@@ -274,6 +275,11 @@ window.onload = function() {
 
 
 				gl.drawElements(gl.TRIANGLES, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+
+
+				gl.deleteBuffer(glIndicesBuffer);
+				gl.deleteBuffer(glTextureCoordsBuffer);
+				gl.deleteBuffer(glIndicesBuffer);
 			}
 		};
 
