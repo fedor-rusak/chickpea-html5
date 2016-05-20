@@ -152,6 +152,35 @@ var makeSoundRequest = function(label, url) {
 	return Promise.resolve({"label": label, "dom": label});
 }
 
+function unprojectOnZeroLevel(x, y, unprojectVMatrix, pMatrix, viewport) {
+	var near = unproject(x,y,0, unprojectVMatrix, pMatrix, viewport),
+		far = unproject(x,y,1, unprojectVMatrix, pMatrix, viewport);
+
+	var t = -near[2] / (far[2] - near[2]);
+//		float tempZ = near[2] + (far[2] - near[2]) * t;
+	var mapClickX = near[0] + (far[0] - near[0]) * t;
+	var mapClickY = -(near[1] + (far[1] - near[1]) * t);
+
+	return [mapClickX, mapClickY];
+}
+
+function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
+	var x = 2 * (winX - viewport[0])/viewport[2] - 1,
+		y = 2 * (winY - viewport[1])/viewport[3] - 1,
+		z = 2 * winZ - 1;
+
+	var vpMatrix = mat4.create();
+	mat4.multiply(pMatrix, mvMatrix, vpMatrix);
+
+	var invMatrix = mat4.create();
+	mat4.inverse(vpMatrix, invMatrix);
+
+	var n = [x,y,z,1];
+	mat4.multiplyVec4(invMatrix,n,n);
+
+	return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
+}
+
 window.onload = function() {
 	try {
 		var internalData = {
@@ -171,7 +200,10 @@ window.onload = function() {
 				internalData.soundsDataArray.push({"label": label, "path": path});
 			},
 			"unproject": function(screenX, screenY) {
-				console.log("unproject("+screenX+", "+screenY+")");
+				var webgl = internalData.webgl;
+				var viewport = [0,0, webgl.gl.viewportWidth, webgl.gl.viewportHeight];
+
+				return unprojectOnZeroLevel(screenX, screenY, webgl.unprojectVMatrix, webgl.pMatrix, viewport);
 			},
 			"playSound": function() {
 				console.log("playSound()");
@@ -183,6 +215,7 @@ window.onload = function() {
 			},
 			"setCamera": function(x, y, z) {
 				internalData.webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
+				internalData.webgl.unprojectVMatrix = mat4.lookAt([x,-y,z], [x,-y,0], [0,1,0]);
 			},
 			"clearScreen": function(r, g, b) {
 				var gl = internalData.webgl.gl;
@@ -222,10 +255,8 @@ window.onload = function() {
 				gl.uniform1i(samplerUniform, 0);
 
 
-				var pMatrix = mat4.create();
-				mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
 				var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-				gl.uniformMatrix4fv(pMatrixUniform, false, pMatrix);
+				gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
 
 				var mMatrix = mat4.create();
 				mat4.identity(mMatrix);
@@ -307,7 +338,8 @@ window.onload = function() {
 		}
 
 		var jumpStart = function() {
-			var gl = getGLcontext(document.querySelector("#canvas"));
+			var canvasElement = document.querySelector("#canvas");
+			var gl = getGLcontext(canvasElement);
 			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
 
 			gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
@@ -319,6 +351,9 @@ window.onload = function() {
 			internalData.webgl = {"gl": gl, "textureProgram": textureProgram, "textures": {}};
 
 			nativeFunctions.setCamera(0,0,0);
+
+			internalData.webgl.pMatrix = mat4.create();
+			mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, internalData.webgl.pMatrix);
 
 			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
 				var imageData = internalData.imagesDataArray[i];
@@ -342,6 +377,22 @@ window.onload = function() {
 
 				internalData.webgl.textures[cachedTextureLabel] = glTexture;
 			}
+
+			canvasElement.onmousedown = function(e) {
+				globalData.addInput(["pressed", 0, e.offsetX, e.offsetY]);
+				internalData["mousePressed"] = true;
+			};
+
+			canvasElement.onmousemove = function(e) {
+				if (internalData.mousePressed) {
+					globalData.addInput(["move", 0, e.offsetX, e.offsetY]);
+				}
+			};
+
+			canvasElement.onmouseup = function(e) {
+				globalData.addInput(["release", 0]);
+				internalData.mousePressed = undefined;
+			};
 
 			window.requestAnimationFrame(gameLoopCycle);
 		}
