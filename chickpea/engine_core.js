@@ -21,25 +21,25 @@ var generateModel = function(data) {
 	return result;
 }
 
-var squareData = {
-	"vertices": [
-		-1.0, -1.0, 0.0,
-		-1.0,  1.0, 0.0,
-		 1.0, -1.0, 0.0,
-		 1.0,  1.0, 0.0
-	],
-	"textureCoords": [
-		0.0, 1.0,
-		0.0, 0.0,
-		1.0, 1.0,
-		1.0, 0.0,
-	],
-	"indices": [
-		0, 1, 2,  1, 3, 2
-	]
+function generateSquareData() {
+	return {
+		"vertices": [
+			-1.0, -1.0, 0.0,
+			-1.0,  1.0, 0.0,
+			 1.0, -1.0, 0.0,
+			 1.0,  1.0, 0.0
+		],
+		"textureCoords": [
+			0.0, 1.0,
+			0.0, 0.0,
+			1.0, 1.0,
+			1.0, 0.0,
+		],
+		"indices": [
+			0, 1, 2,  1, 3, 2
+		]
+	};
 };
-
-var squareModel = generateModel(squareData);
 
 var textureVertexShaderCode =
 	"attribute vec3 aVertexPosition;"+
@@ -64,8 +64,18 @@ var textureFragmentShaderCode =
 	"uniform sampler2D uSampler;"+
 
 	"void main(void) {"+
-	"gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));"+
-	// " gl_FragColor = vec4(0.1, 0.2, 0.3, 0.4);" +
+	"	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));"+
+	"}";
+
+var wireframeFragmentShaderCode =
+	"precision mediump float;"+
+
+	"varying vec2 vTextureCoord;"+
+
+	"uniform sampler2D uSampler;"+
+
+	"void main(void) {"+
+	"	gl_FragColor = vec4(0.1, 0.2, 0.3, 0.4);" +
 	"}";
 
 function getGLcontext(canvas) {
@@ -181,13 +191,180 @@ function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
 	return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
 }
 
+function generateGlTexture(gl, imageData, withAlphaChannel) {
+	var imageFormat = gl.RGB;
+
+	if (withAlphaChannel)
+		imageFormat = gl.RGBA;
+
+	var glTexture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_2D, glTexture);
+	// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, imageData);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	gl.bindTexture(gl.TEXTURE_2D, null);
+
+	return glTexture;
+}
+
+function translate(point, x, y, z) {
+	return [point[0]+x, point[1]+y, point[2]+z];
+}
+
+function rotate(point, roll, pitch, yaw) {
+    var cosa = Math.cos(yaw || 0);
+    var sina = Math.sin(yaw || 0);
+
+    var cosb = Math.cos(pitch || 0);
+    var sinb = Math.sin(pitch || 0);
+
+    var cosc = Math.cos(roll || 0);
+    var sinc = Math.sin(roll || 0);
+
+    var Axx = cosa*cosb;
+    var Axy = cosa*sinb*sinc - sina*cosc;
+    var Axz = cosa*sinb*cosc + sina*sinc;
+
+    var Ayx = sina*cosb;
+    var Ayy = sina*sinb*sinc + cosa*cosc;
+    var Ayz = sina*sinb*cosc - cosa*sinc;
+
+    var Azx = -sinb;
+    var Azy = cosb*sinc;
+    var Azz = cosb*cosc;
+
+    var px = point[0];
+    var py = point[1];
+    var pz = point[2];
+
+    var result = [];
+    result[0] = Axx*px + Axy*py + Axz*pz;
+    result[1] = Ayx*px + Ayy*py + Ayz*pz;
+    result[2] = Azx*px + Azy*py + Azz*pz;
+
+    return result;
+}
+
+function renderSquare(webgl, drawCommands) {
+	var programType = drawCommands[0][0],
+		textureLabel = drawCommands[0][1];
+
+	var gl = webgl.gl;
+	var program = webgl.programs.texture;
+	if (programType === "wireframe")
+		program = webgl.programs.wireframe;
+
+
+	var squareData = generateSquareData();
+
+	var modelData = {"vertices":[], "textureCoords":[],"indices":[]};
+
+
+	for (var i = 0; i < drawCommands.length; i++) {
+		var drawCommand = drawCommands[i];
+
+		var x = drawCommand[2],
+			y = drawCommand[3],
+			z = drawCommand[4],
+			xa = drawCommand[5],
+			ya = drawCommand[6],
+			za = drawCommand[7];
+
+		for (var j = 0; j < squareData.vertices.length/3; j++) {
+			var squareVertex = [
+				squareData.vertices[j*3],
+				squareData.vertices[j*3+1],
+				squareData.vertices[j*3+2]
+			];
+
+			var tempVertex = rotate(squareVertex, degToRad(xa), degToRad(ya), degToRad(za));
+
+			tempVertex = translate(tempVertex, x,y,z);
+
+			modelData.vertices.push(tempVertex[0]);
+			modelData.vertices.push(tempVertex[1]);
+			modelData.vertices.push(tempVertex[2]);
+
+			modelData.textureCoords.push(squareData.textureCoords[j*2]);
+			modelData.textureCoords.push(squareData.textureCoords[j*2+1]);
+		}
+
+		var vertexCount = squareData.vertices.length/3;
+		for (var j = 0; j < squareData.indices.length; j++) {
+			modelData.indices.push(squareData.indices[j]+vertexCount*i);
+		}
+	}
+
+
+	var model = generateModel(modelData);
+
+	gl.useProgram(program);
+
+	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
+	gl.enableVertexAttribArray(vertexAttribute);
+	var glVerticesBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STATIC_DRAW);
+	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+
+	var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
+	gl.enableVertexAttribArray(textureCoordsAttribute);
+	var glTextureCoordsBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STATIC_DRAW);
+	gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
+
+
+	var samplerUniform = gl.getUniformLocation(program, "uSampler");
+	gl.activeTexture(gl.TEXTURE1);
+	gl.bindTexture(gl.TEXTURE_2D, webgl.textures[textureLabel]);
+	gl.uniform1i(samplerUniform, 1);
+
+
+	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
+	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
+
+	// var mMatrix = mat4.create();
+	// mat4.identity(mMatrix);
+	// mat4.translate(mMatrix, [x || 0, y || 0, z || 0]);
+	// mat4.rotate(mMatrix, degToRad(xa || 0), [1, 0, 0]);
+	// mat4.rotate(mMatrix, degToRad(ya || 0), [0, 1, 0]);
+
+	// alert(JSON.stringify(rotate({x:1,y:0,z:0},0,0,degToRad(90))));
+	// mat4.rotate(mMatrix, degToRad(za || 0), [0, 0, 1]);
+
+	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
+	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
+
+
+	var glIndicesBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STATIC_DRAW);
+
+
+	var renderingType = gl.TRIANGLES;
+	if (programType === "wireframe")
+		renderingType = gl.LINE_LOOP;
+	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+
+
+	gl.deleteBuffer(glIndicesBuffer);
+	gl.deleteBuffer(glTextureCoordsBuffer);
+	gl.deleteBuffer(glIndicesBuffer);
+}
+
 window.onload = function() {
 	try {
 		var internalData = {
 			"imagesDataArray": [],
 			"images": {},
 			"soundsDataArray": [],
-			"sounds": {}
+			"sounds": {},
+			"drawQueue": []
 		};
 
 		var globalData = {};
@@ -224,61 +401,8 @@ window.onload = function() {
 
 				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			},
-			"render": function(label, x, y, z) {
-				var webgl = internalData.webgl;
-
-				var gl = webgl.gl;
-				var program = webgl.textureProgram;
-
-				var model = squareModel;
-
-				gl.useProgram(program);
-
-				var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
-				gl.enableVertexAttribArray(vertexAttribute);
-				var glVerticesBuffer = gl.createBuffer();
-				gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-				gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STATIC_DRAW);
-				gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
-
-				var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
-				gl.enableVertexAttribArray(textureCoordsAttribute);
-				var glTextureCoordsBuffer = gl.createBuffer();
-				gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
-				gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STATIC_DRAW);
-				gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
-
-
-				var samplerUniform = gl.getUniformLocation(program, "uSampler");
-				gl.activeTexture(gl.TEXTURE1);
-				gl.bindTexture(gl.TEXTURE_2D, webgl.textures[label]);
-				gl.uniform1i(samplerUniform, 1);
-
-
-				var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-				gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
-
-				var mMatrix = mat4.create();
-				mat4.identity(mMatrix);
-				mat4.translate(mMatrix, [x || 0, y || 0, z || 0]);
-				// mat4.rotate(mMatrix, degToRad(45), [1, 0, 0]);
-				var mvMatrix = mat4.create();
-				mat4.multiply(webgl.vMatrix, mMatrix, mvMatrix);
-				var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
-				gl.uniformMatrix4fv(mvMatrixUniform, false, mvMatrix);
-
-
-				var glIndicesBuffer = gl.createBuffer();
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STATIC_DRAW);
-
-
-				gl.drawElements(gl.TRIANGLES, model.indicesItems, gl.UNSIGNED_SHORT, 0);
-
-
-				gl.deleteBuffer(glIndicesBuffer);
-				gl.deleteBuffer(glTextureCoordsBuffer);
-				gl.deleteBuffer(glIndicesBuffer);
+			"render": function(programType, label, x, y, z, xa, ya, za) {
+				internalData.drawQueue.push([programType, label, x,y,z, xa,ya,za]);
 			}
 		};
 
@@ -339,6 +463,36 @@ window.onload = function() {
 
 			globalData.render();
 
+			var oldProgramType = null;
+
+			var temp = [];
+
+			for (var i = 0; i < internalData.drawQueue.length; i++) {
+				var drawCommand = internalData.drawQueue[i];
+
+				var programType = drawCommand[0];
+
+				if (oldProgramType === null) {
+					temp.push(drawCommand);
+				}
+				else if (programType === oldProgramType) {
+					temp.push(drawCommand);
+				}
+				else if (programType !== oldProgramType) {
+					renderSquare(internalData.webgl, temp);
+					temp = [];
+					temp.push(drawCommand);
+				}
+
+				if (i === internalData.drawQueue.length - 1) {
+					renderSquare(internalData.webgl, temp);
+				}
+
+				oldProgramType = programType;
+			}
+
+			internalData.drawQueue = [];
+
 			window.requestAnimationFrame(gameLoopCycle);
 		}
 
@@ -346,14 +500,19 @@ window.onload = function() {
 			var canvasElement = document.querySelector("#canvas");
 			var gl = getGLcontext(canvasElement);
 			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
+			var wireframeProgram = getProgram(gl, textureVertexShaderCode, wireframeFragmentShaderCode);
 
 			gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
-			gl.enable(gl.BLEND);
-			gl.blendEquation( gl.FUNC_ADD );
-			gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+            gl.enable(gl.BLEND);
+            gl.disable(gl.DEPTH_TEST);
 
-			internalData.webgl = {"gl": gl, "textureProgram": textureProgram, "textures": {}};
+			internalData.webgl = {
+				"gl": gl,
+				"programs": {"texture": textureProgram, "wireframe": wireframeProgram},
+				"textures": {}
+			};
 
 			nativeFunctions.setCamera(0,0,0);
 
@@ -364,21 +523,9 @@ window.onload = function() {
 				var imageData = internalData.imagesDataArray[i];
 				var cachedTextureLabel = imageData.label;
 
-				var imageFormat = gl.RGB;
+				var withAlphaChannel = imageData.path.indexOf("with_alpha") > 0;
 
-				if (imageData.path.indexOf("with_alpha") > 0)
-					imageFormat = gl.RGBA;
-
-				var glTexture = gl.createTexture();
-				gl.bindTexture(gl.TEXTURE_2D, glTexture);
-				// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-				gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, internalData.images[cachedTextureLabel]);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-				gl.bindTexture(gl.TEXTURE_2D, null);
+				var glTexture = generateGlTexture(gl, internalData.images[cachedTextureLabel], withAlphaChannel);
 
 				internalData.webgl.textures[cachedTextureLabel] = glTexture;
 			}

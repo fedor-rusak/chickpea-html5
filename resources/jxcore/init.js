@@ -39,6 +39,10 @@ function init(global, natives) {
 		}
 	}
 
+	var renderWireframe = function(x,y,z, xa,ya,za) {
+		natives.render("texture", "explosion", x,y,z, xa,ya,za);
+	}
+
 	global.render = function() {
 		if (!global.cameraSet) {
 			var data = natives.getScreenDimensions();
@@ -65,8 +69,12 @@ function init(global, natives) {
 		// console.log(Date.now());
 
 		natives.clearScreen(0.1, 0.2, 0.3);
-		natives.render("explosion", -1.0, -1.0, 0.0);
-		natives.render("explosion", 1.0, 1.0, 0.0);
+		renderWireframe( 1, 0, 0,  0, 90);
+		renderWireframe(-1, 0, 0,  0, 90);
+		renderWireframe( 0, 1, 0, 90);
+		renderWireframe( 0,-1, 0, 90);
+		renderWireframe( 0, 0,-1);
+		renderWireframe( 0, 0, 1);
 	}
 }
 
