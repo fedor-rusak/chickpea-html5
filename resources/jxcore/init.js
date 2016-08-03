@@ -39,8 +39,33 @@ function init(global, natives) {
 		}
 	}
 
-	var renderWireframe = function(x,y,z, xa,ya,za) {
-		natives.render("texture", "explosion", x,y,z, xa,ya,za);
+	var counter = 0;
+
+	var renderSide = function(x,y,z, xa,ya,za) {
+		counter++;
+		var textureLabel = counter % 2 === 0 ? "explosion" : "wireframe";
+		natives.renderTexturedSquare(textureLabel, x,y,z, xa,ya,za);
+	}
+
+	var degToRad = function(degrees) {
+		return degrees * Math.PI / 180;
+	}
+
+	var sin = function(degrees) {
+		return Math.sin(degToRad(degrees));
+	}
+
+	var cos = function(degrees) {
+		return Math.cos(degToRad(degrees));
+	}
+
+	var renderCube = function(x,y,z, zAngles) {
+		renderSide( x-cos(zAngles), y, z+sin(zAngles),	0, 90+zAngles);
+		renderSide( x+cos(zAngles), y, z-sin(zAngles),	0, 90+zAngles);
+		renderSide( x, y+1, z,							90,zAngles);
+		renderSide( x,y-1, z,							90,zAngles);
+		renderSide( x-sin(zAngles), y,z-cos(zAngles),	0,zAngles);
+		renderSide( x+sin(zAngles), y,z+cos(zAngles),	0,zAngles);
 	}
 
 	global.render = function() {
@@ -69,12 +94,7 @@ function init(global, natives) {
 		// console.log(Date.now());
 
 		natives.clearScreen(0.1, 0.2, 0.3);
-		renderWireframe( 1, 0, 0,  0, 90);
-		renderWireframe(-1, 0, 0,  0, 90);
-		renderWireframe( 0, 1, 0, 90);
-		renderWireframe( 0,-1, 0, 90);
-		renderWireframe( 0, 0,-1);
-		renderWireframe( 0, 0, 1);
+		renderCube(0,0,0, global.angle);
 	}
 }
 
