@@ -95,6 +95,8 @@ function init(global, natives) {
 
 		natives.clearScreen(0.1, 0.2, 0.3);
 		renderCube(0,0,0, global.angle);
+
+		natives.renderColoredPolygons([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0], [0,1,2, 3,0,2], 0.1, 0.2, 0.2, 0.5, 0,0,0, 0, global.angle);
 	}
 }
 

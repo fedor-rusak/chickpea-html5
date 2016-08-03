@@ -13,6 +13,11 @@ var generateModel = function(data) {
 		result["textureCoordsItemSize"] = 2;
 	}
 
+	if (data.colors) {
+		result["colorBuffer"] = new Float32Array(data.colors);
+		result["colorItemSize"] = 4;
+	}
+
 	if (data.indices) {
 		result["indicesBuffer"] = new Uint16Array(data.indices);
 		result["indicesItems"] = data.indices.length;
@@ -82,6 +87,30 @@ var wireframeFragmentShaderCode =
 
 	"void main(void) {"+
 	"	gl_FragColor = vec4(0.1, 0.2, 0.3, 0.4);" +
+	"}";
+
+var coloredVertexShaderCode =
+	"attribute vec3 aVertexPosition;"+
+	"attribute vec4 aColor;"+
+
+	"uniform mat4 uMVMatrix;"+
+	"uniform mat4 uPMatrix;"+
+
+	"varying vec4 vColor;"+
+
+
+	"void main(void) {"+
+	"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
+	"	vColor = aColor;"+
+	"}";
+
+var coloredFragmentShaderCode =
+	"precision mediump float;"+
+
+	"varying vec4 vColor;"+
+
+	"void main(void) {"+
+	"	gl_FragColor = vColor;"+
 	"}";
 
 function getGLcontext(canvas) {
@@ -343,7 +372,7 @@ function renderTexturedPolygons(webgl, textureLabel, modelData) {
 function renderColoredPolygons(webgl, modelData) {
 	var gl = webgl.gl;
 
-	program = webgl.programs.wireframe;
+	var program = webgl.programs.colored;
 
 
 	var model = generateModel(modelData);
@@ -356,6 +385,13 @@ function renderColoredPolygons(webgl, modelData) {
 	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
 	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
 	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+
+	var colorAttribute = gl.getAttribLocation(program, "aColor");
+	gl.enableVertexAttribArray(colorAttribute);
+	var glColorBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
+	gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
 
 
 	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
@@ -371,16 +407,18 @@ function renderColoredPolygons(webgl, modelData) {
 
 
 	var renderingType = gl.TRIANGLES;
-	renderingType = gl.LINE_LOOP;
 	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
 
 
 	gl.deleteBuffer(glVerticesBuffer);
+	gl.deleteBuffer(glColorBuffer);
 	gl.deleteBuffer(glIndicesBuffer);
+
+	gl.disableVertexAttribArray(1);
 }
 
 var render = function(tag, webgl, data) {
-	if (tag === "renderTexturedSquare") {
+	if (tag === "texturedSquare") {
 		var drawCommands = data;
 
 		var squareData = generateSquareData();
@@ -429,6 +467,60 @@ var render = function(tag, webgl, data) {
 		else
 			renderTexturedPolygons(webgl, textureLabel, modelData);
 	}
+	else if (tag === "coloredPolygons") {
+
+		var drawCommands = data;
+
+		var squareData = generateSquareData();
+
+		var modelData = {"vertices":[], "colors":[],"indices":[]};
+
+
+		for (var i = 0; i < drawCommands.length; i++) {
+			var drawCommand = drawCommands[i];
+
+			var vertices = drawCommand[0],
+				indices = drawCommand[1],
+				r = drawCommand[2],
+				g = drawCommand[3],
+				b = drawCommand[4],
+				a = drawCommand[5],
+				x = drawCommand[6] || 0,
+				y = drawCommand[7] || 0,
+				z = drawCommand[8] || 0,
+				xa = drawCommand[9],
+				ya = drawCommand[10],
+				za = drawCommand[11];
+
+			for (var j = 0; j < vertices.length/3; j++) {
+				var vertex = [
+					vertices[j*3],
+					vertices[j*3+1],
+					vertices[j*3+2]
+				];
+
+				var tempVertex = rotate3d(vertex, xa, ya, za);
+
+				tempVertex = translate(tempVertex, x,y,z);
+
+				modelData.vertices.push(tempVertex[0]);
+				modelData.vertices.push(tempVertex[1]);
+				modelData.vertices.push(tempVertex[2]);
+
+				modelData.colors.push(r);
+				modelData.colors.push(g);
+				modelData.colors.push(b);
+				modelData.colors.push(a);
+			}
+
+			var oldVertexCount = (modelData.vertices.length - vertices.length)/3 ;
+			for (var j = 0; j < indices.length; j++) {
+				modelData.indices.push(indices[j]+oldVertexCount);
+			}
+		}
+
+		renderColoredPolygons(webgl,  modelData);
+	}
 }
 
 window.onload = function() {
@@ -476,7 +568,7 @@ window.onload = function() {
 				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			},
 			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
-				internalData.drawQueue.push({"tag":"renderTexturedSquare", "data":[label, x,y,z, xa,ya,za]});
+				internalData.drawQueue.push({"tag":"texturedSquare", "data":[label, x,y,z, xa,ya,za]});
 			},
 			"renderColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, r,g,b,a, x,y,z, xa,ya,za]});
@@ -504,8 +596,10 @@ window.onload = function() {
 				requestArray.push(makeImageRequest(imageData.label, "resources/"+imageData.path));
 			}
 
-			var imagePromises = Promise.all(requestArray).then(cacheImages)
-				   .catch(function(data) {alert("Something bad happened!");});
+			var imagePromises = 
+				Promise.all(requestArray)
+					.then(cacheImages)
+					.catch(function(data) {alert("Something bad happened!");});
 
 			return imagePromises;
 		};
@@ -553,7 +647,7 @@ window.onload = function() {
 					drawCommand = internalData.drawQueue[i].data;
 
 				var identifier = tag;
-				if (tag === "renderTexturedSquare")
+				if (tag === "texturedSquare")
 					identifier += drawCommand[0]; //textureLabel
 
 
@@ -587,16 +681,22 @@ window.onload = function() {
 			var gl = getGLcontext(canvasElement);
 			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
 			var wireframeProgram = getProgram(gl, wireframeVertexShaderCode, wireframeFragmentShaderCode);
+			var coloredProgram = getProgram(gl, coloredVertexShaderCode, coloredFragmentShaderCode);
 
 			gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
             gl.enable(gl.BLEND);
             gl.disable(gl.DEPTH_TEST);
+            // gl.enable(gl.CULL_FACE);
 
 			internalData.webgl = {
 				"gl": gl,
-				"programs": {"texture": textureProgram, "wireframe": wireframeProgram},
+				"programs": {
+					"texture": textureProgram,
+					"wireframe": wireframeProgram,
+					"colored": coloredProgram
+				},
 				"textures": {}
 			};
 
