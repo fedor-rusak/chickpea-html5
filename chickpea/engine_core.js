@@ -23,6 +23,15 @@ var generateModel = function(data) {
 		result["indicesItems"] = data.indices.length;
 	}
 
+	if (data.vertexNormals) {
+		result["vertexNormalsBuffer"] = new Float32Array(data.vertexNormals);
+		result["vertexNormalItemSize"] = 3;
+	}
+
+	if (data.lightPos) {
+		result["lightPos"] = data.lightPos;
+	}
+
 	return result;
 }
 
@@ -112,6 +121,47 @@ var coloredFragmentShaderCode =
 	"void main(void) {"+
 	"	gl_FragColor = vColor;"+
 	"}";
+
+var coloredLitVertexShaderCode =
+	"attribute vec3 aVertexPosition;"+
+	"attribute vec3 aVertexNormal;"+
+	"attribute vec4 aColor;"+
+
+	"uniform mat4 uMVMatrix;"+
+	"uniform mat4 uPMatrix;"+
+	"uniform mat3 uNMatrix;"+
+
+	"varying vec4 vPosition;"+
+	"varying vec4 vColor;"+
+	"varying vec3 vTransformedNormal;"+
+
+
+	"void main(void) {"+
+	"	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);"+
+	"	gl_Position = uPMatrix * vPosition;"+
+	"	vTransformedNormal = uNMatrix * aVertexNormal;"+
+	"	vColor = aColor;"+
+	"}";
+
+var coloredLitFragmentShaderCode =
+	"precision mediump float;"+
+
+	"uniform vec3 uLightPosition;"+
+
+	"varying vec4 vPosition;"+
+	"varying vec4 vColor;"+
+	"varying vec3 vTransformedNormal;"+
+
+
+	"void main(void) {"+
+	"	vec3 lightDirection = normalize(uLightPosition - vPosition.xyz);"+
+
+	"	float directionalLightWeighting = max(dot(normalize(vTransformedNormal), lightDirection), 0.0);"+
+	"	vec3 lightWeighting = vec3(0.2,0.2,0.2)+vec3(0.8,0.8,0.8) * directionalLightWeighting;"+
+
+	"	gl_FragColor = vec4(lightWeighting, vColor.a);"+
+	"}";
+
 
 function getGLcontext(canvas) {
 	var gl;
@@ -278,7 +328,7 @@ function rotate3d(point, xAngle, yAngle, zAngle) {
 		result[1] = zRotated[1];
 	}
 
-    return result;
+	return result;
 }
 
 
@@ -417,6 +467,73 @@ function renderColoredPolygons(webgl, modelData) {
 	gl.disableVertexAttribArray(1);
 }
 
+function renderColoredLitPolygons(webgl, modelData) {
+	var gl = webgl.gl;
+
+	var program = webgl.programs.coloredLit;
+
+
+	var model = generateModel(modelData);
+
+	gl.useProgram(program);
+
+	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
+	gl.enableVertexAttribArray(vertexAttribute);
+	var glVerticesBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
+	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+
+
+	var vertexNormalAttribute = gl.getAttribLocation(program, "aVertexNormal");
+	gl.enableVertexAttribArray(vertexNormalAttribute);
+	var glVertexNormalsBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
+	gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
+
+	var colorAttribute = gl.getAttribLocation(program, "aColor");
+	gl.enableVertexAttribArray(colorAttribute);
+	var glColorBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
+	gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
+
+
+	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
+	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
+
+	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
+	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
+
+
+	var normalMatrixUniform = gl.getUniformLocation(program, "uNMatrix");
+	gl.uniformMatrix3fv(normalMatrixUniform, false, webgl.normalMatrix);
+
+	var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
+	var lightPos = modelData.lightPos;
+	gl.uniform3f(lightPositionUniform, false, lightPos.x,lightPos.y,lightPos.z);
+
+
+
+
+	var glIndicesBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
+
+
+	var renderingType = gl.TRIANGLES;
+	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+
+
+	gl.deleteBuffer(glVerticesBuffer);
+	gl.deleteBuffer(glColorBuffer);
+	gl.deleteBuffer(glIndicesBuffer);
+
+	gl.disableVertexAttribArray(2);
+	gl.disableVertexAttribArray(1);
+}
+
 var render = function(tag, webgl, data) {
 	if (tag === "texturedSquare") {
 		var drawCommands = data;
@@ -521,6 +638,71 @@ var render = function(tag, webgl, data) {
 
 		renderColoredPolygons(webgl,  modelData);
 	}
+	else if (tag === "coloredLitPolygons") {
+
+		var drawCommands = data;
+
+		var squareData = generateSquareData();
+
+		var modelData = {"vertices":[], "colors":[],"indices":[], "vertexNormals": []};
+
+
+		for (var i = 0; i < drawCommands.length; i++) {
+			var drawCommand = drawCommands[i];
+
+			var vertices = drawCommand[0],
+				indices = drawCommand[1],
+				normals = drawCommand[2],
+				lightX = drawCommand[3],
+				lightY = drawCommand[4],
+				lightZ = drawCommand[5],
+				r = drawCommand[6],
+				g = drawCommand[7],
+				b = drawCommand[8],
+				a = drawCommand[9],
+				x = drawCommand[10] || 0,
+				y = drawCommand[11] || 0,
+				z = drawCommand[12] || 0,
+				xa = drawCommand[13],
+				ya = drawCommand[14],
+				za = drawCommand[15];
+
+			for (var j = 0; j < vertices.length/3; j++) {
+				var vertex = [
+					vertices[j*3],
+					vertices[j*3+1],
+					vertices[j*3+2]
+				];
+
+				var tempVertex = rotate3d(vertex, xa, ya, za);
+
+				tempVertex = translate(tempVertex, x,y,z);
+
+				modelData.vertices.push(tempVertex[0]);
+				modelData.vertices.push(tempVertex[1]);
+				modelData.vertices.push(tempVertex[2]);
+
+				modelData.colors.push(r);
+				modelData.colors.push(g);
+				modelData.colors.push(b);
+				modelData.colors.push(a);
+			}
+
+			var oldVertexCount = (modelData.vertices.length - vertices.length)/3 ;
+			for (var j = 0; j < indices.length; j++) {
+				modelData.indices.push(indices[j]+oldVertexCount);
+			}
+
+			for (var j = 0; j < normals.length; j++) {
+				modelData.vertexNormals.push(normals[j]);
+			}
+
+			modelData.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
+		}
+
+		renderColoredLitPolygons(webgl,  modelData);
+	}
+
 }
 
 window.onload = function() {
@@ -559,6 +741,11 @@ window.onload = function() {
 			"setCamera": function(x, y, z) {
 				internalData.webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
 				internalData.webgl.unprojectVMatrix = mat4.lookAt([x,-y,z], [x,-y,0], [0,1,0]);
+
+				var normalMatrix = mat3.create();
+				mat4.toInverseMat3(internalData.webgl.vMatrix, normalMatrix);
+				mat3.transpose(normalMatrix);
+				internalData.webgl.normalMatrix = normalMatrix;
 			},
 			"clearScreen": function(r, g, b) {
 				var gl = internalData.webgl.gl;
@@ -572,6 +759,9 @@ window.onload = function() {
 			},
 			"renderColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, r,g,b,a, x,y,z, xa,ya,za]});
+			},
+			"renderColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
+				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za]});
 			}
 		};
 
@@ -682,20 +872,24 @@ window.onload = function() {
 			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
 			var wireframeProgram = getProgram(gl, wireframeVertexShaderCode, wireframeFragmentShaderCode);
 			var coloredProgram = getProgram(gl, coloredVertexShaderCode, coloredFragmentShaderCode);
+			var coloredLitProgram = getProgram(gl, coloredLitVertexShaderCode, coloredLitFragmentShaderCode);
 
 			gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-            gl.enable(gl.BLEND);
-            gl.disable(gl.DEPTH_TEST);
-            // gl.enable(gl.CULL_FACE);
+			// gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+			gl.enable(gl.BLEND);
+			gl.disable(gl.DEPTH_TEST);
+			// gl.enable(gl.CULL_FACE);
 
 			internalData.webgl = {
 				"gl": gl,
 				"programs": {
 					"texture": textureProgram,
 					"wireframe": wireframeProgram,
-					"colored": coloredProgram
+					"colored": coloredProgram,
+					"coloredLit": coloredLitProgram
 				},
 				"textures": {}
 			};
