@@ -168,8 +168,6 @@ function getGLcontext(canvas) {
 
 	try {
 		gl = canvas.getContext("experimental-webgl");
-		gl.viewportWidth = canvas.width;
-		gl.viewportHeight = canvas.height;
 	}
 	catch (e) {}
 
@@ -512,7 +510,7 @@ function renderColoredLitPolygons(webgl, modelData) {
 
 	var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
 	var lightPos = modelData.lightPos;
-	gl.uniform3f(lightPositionUniform, false, lightPos.x,lightPos.y,lightPos.z);
+	gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
 
 
 
@@ -535,7 +533,28 @@ function renderColoredLitPolygons(webgl, modelData) {
 }
 
 var render = function(tag, webgl, data) {
-	if (tag === "texturedSquare") {
+	if (tag === "clearScreen") {
+		var gl = webgl.gl;
+		var color = data[data.length-1];
+
+		gl.clearColor(color.r || 0, color.g || 0, color.b || 0, 1.0);
+
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	}
+	if (tag === "enableAlpha") {
+		var gl = webgl.gl;
+		// gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+		gl.enable(gl.BLEND);
+		// gl.disable(gl.DEPTH_TEST);
+	}
+	else if (tag === "disableAlpha") {
+		var gl = webgl.gl;
+		gl.disable(gl.BLEND);
+		// gl.enable(gl.DEPTH_TEST);
+	}
+	else if (tag === "texturedSquare") {
 		var drawCommands = data;
 
 		var squareData = generateSquareData();
@@ -726,7 +745,7 @@ window.onload = function() {
 			},
 			"unproject": function(screenX, screenY) {
 				var webgl = internalData.webgl;
-				var viewport = [0,0, webgl.gl.viewportWidth, webgl.gl.viewportHeight];
+				var viewport = [0,0, webgl.canvas.width, webgl.canvas.height];
 
 				return unprojectOnZeroLevel(screenX, screenY, webgl.unprojectVMatrix, webgl.pMatrix, viewport);
 			},
@@ -735,8 +754,17 @@ window.onload = function() {
 			},
 			"getScreenDimensions": function() {
 				console.log("getScreenDimensions()");
-				var screenWidth = 800, screenHeight = 600;
-				return [screenWidth, screenHeight];
+				return [internalData.webgl.canvas.width, internalData.webgl.canvas.height];
+			},
+			"setViewport": function(width, height) {
+				internalData.webgl.canvas.width = width;
+				internalData.webgl.canvas.height = height;
+
+				var gl = internalData.webgl.gl;
+				internalData.webgl.pMatrix = mat4.create();
+				mat4.perspective(45, width / height, 0.1, 100.0, internalData.webgl.pMatrix);
+
+				gl.viewport(0, 0, width, height);				
 			},
 			"setCamera": function(x, y, z) {
 				internalData.webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
@@ -748,11 +776,14 @@ window.onload = function() {
 				internalData.webgl.normalMatrix = normalMatrix;
 			},
 			"clearScreen": function(r, g, b) {
-				var gl = internalData.webgl.gl;
-
-				if (r) gl.clearColor(r || 0, g || 0, b || 0, 1.0);
-
-				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+				internalData.drawQueue.push({"tag":"clearScreen", data: {"r": r, "g": g, "b":b}});
+			},
+			"enableAlphaBlending": function() {
+				//http://delphic.me.uk/webglalpha.html
+				internalData.drawQueue.push({"tag":"enableAlpha"});
+			},
+			"disableAlphaBlending": function() {
+				internalData.drawQueue.push({"tag":"disableAlpha"});
 			},
 			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
 				internalData.drawQueue.push({"tag":"texturedSquare", "data":[label, x,y,z, xa,ya,za]});
@@ -840,8 +871,7 @@ window.onload = function() {
 				if (tag === "texturedSquare")
 					identifier += drawCommand[0]; //textureLabel
 
-
-				if (identifier === null) {
+				if (oldIdentifier === null) {
 					temp.push(drawCommand);
 				}
 				else if (identifier === oldIdentifier) {
@@ -868,22 +898,17 @@ window.onload = function() {
 
 		var jumpStart = function() {
 			var canvasElement = document.querySelector("#canvas");
+
 			var gl = getGLcontext(canvasElement);
+
 			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
 			var wireframeProgram = getProgram(gl, wireframeVertexShaderCode, wireframeFragmentShaderCode);
 			var coloredProgram = getProgram(gl, coloredVertexShaderCode, coloredFragmentShaderCode);
 			var coloredLitProgram = getProgram(gl, coloredLitVertexShaderCode, coloredLitFragmentShaderCode);
 
-			gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-
-			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-			// gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-			// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-			gl.enable(gl.BLEND);
-			gl.disable(gl.DEPTH_TEST);
-			// gl.enable(gl.CULL_FACE);
 
 			internalData.webgl = {
+				"canvas": canvasElement,
 				"gl": gl,
 				"programs": {
 					"texture": textureProgram,
@@ -894,10 +919,34 @@ window.onload = function() {
 				"textures": {}
 			};
 
+
+			var onResize = function() {
+				var width = window.innerWidth
+					|| document.documentElement.clientWidth
+					|| document.body.clientWidth;
+
+				var height = window.innerHeight
+					|| document.documentElement.clientHeight
+					|| document.body.clientHeight;
+
+				if (width < 120) width = 120;
+				if (height < 80) height = 80;
+
+				nativeFunctions.setViewport(width, height);
+			}
+
+			onResize();
+			window.onresize = onResize;
+
+
+			nativeFunctions.enableAlphaBlending();
+
 			nativeFunctions.setCamera(0,0,0);
 
-			internalData.webgl.pMatrix = mat4.create();
-			mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, internalData.webgl.pMatrix);
+
+			gl.enable(gl.DEPTH_TEST);
+			// gl.enable(gl.CULL_FACE);
+
 
 			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
 				var imageData = internalData.imagesDataArray[i];

@@ -95,7 +95,8 @@ function init(global, natives) {
 
 		natives.clearScreen(0.1, 0.2, 0.3);
 
-		renderCube(0,0,0, global.angle);
+
+		natives.disableAlphaBlending();
 
 		natives.renderColoredPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
@@ -105,9 +106,15 @@ function init(global, natives) {
 		natives.renderColoredLitPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 			[0,1,2, 3,0,2],
-			[0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
-			10,0,5,
+			// [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1,-1,-1,1,1,1,1], //circly normals
+			[0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1], //squary normals
+			0,0,5,
 			1.0, 0, 0, 1);
+
+		natives.enableAlphaBlending();
+
+		renderCube(0,0,0, global.angle);
+
 	}
 }
 
