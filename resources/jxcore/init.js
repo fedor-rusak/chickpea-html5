@@ -101,7 +101,7 @@ function init(global, natives) {
 		natives.renderColoredPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 			[0,1,2, 3,0,2],
-			0.1, 0.2, 0.2, 0.5, 0,0,0, 0, global.angle);
+			0.1, 0.7, 0.2, 0.5, 0,0,0, 0, global.angle);
 
 		natives.renderColoredLitPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],

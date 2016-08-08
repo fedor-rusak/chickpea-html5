@@ -13,6 +13,9 @@ var generateModel = function(data) {
 		result["textureCoordsItemSize"] = 2;
 	}
 
+	if (data.textureLabel)
+		result["textureLabel"] = data.textureLabel;
+
 	if (data.colors) {
 		result["colorBuffer"] = new Float32Array(data.colors);
 		result["colorItemSize"] = 4;
@@ -159,7 +162,7 @@ var coloredLitFragmentShaderCode =
 	"	float directionalLightWeighting = max(dot(normalize(vTransformedNormal), lightDirection), 0.0);"+
 	"	vec3 lightWeighting = vec3(0.2,0.2,0.2)+vec3(0.8,0.8,0.8) * directionalLightWeighting;"+
 
-	"	gl_FragColor = vec4(lightWeighting, vColor.a);"+
+	"	gl_FragColor = vec4(vColor.rgb * lightWeighting, vColor.a);"+
 	"}";
 
 
@@ -366,7 +369,7 @@ function renderWireframePolygons(webgl, modelData) {
 	gl.deleteBuffer(glIndicesBuffer);
 }
 
-function renderTexturedPolygons(webgl, textureLabel, modelData) {
+function renderTexturedPolygons(webgl, modelData) {
 	var gl = webgl.gl;
 
 	var program = webgl.programs.texture;
@@ -391,7 +394,7 @@ function renderTexturedPolygons(webgl, textureLabel, modelData) {
 
 	var samplerUniform = gl.getUniformLocation(program, "uSampler");
 	gl.activeTexture(gl.TEXTURE1);
-	gl.bindTexture(gl.TEXTURE_2D, webgl.textures[textureLabel]);
+	gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
 	gl.uniform1i(samplerUniform, 1);
 
 
@@ -532,6 +535,89 @@ function renderColoredLitPolygons(webgl, modelData) {
 	gl.disableVertexAttribArray(1);
 }
 
+var prepareData = function(
+	sideEffectObject, vertices, indices, textureCoords, textureLabel,
+	x,y,z, xa,ya,za, r,g,b,a,
+	normals, lightX, lightY, lightZ) {
+
+	for (var j = 0; j < vertices.length/3; j++) {
+		var squareVertex = [
+			vertices[j*3],
+			vertices[j*3+1],
+			vertices[j*3+2]
+		];
+
+		var tempVertex = rotate3d(squareVertex, xa, ya, za);
+
+		tempVertex = translate(tempVertex, x,y,z);
+
+		sideEffectObject.vertices.push(tempVertex[0]);
+		sideEffectObject.vertices.push(tempVertex[1]);
+		sideEffectObject.vertices.push(tempVertex[2]);
+
+		if (textureCoords) {
+			sideEffectObject.textureCoords.push(textureCoords[j*2]);
+			sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
+		}
+
+		if (r || r === 0) {
+			sideEffectObject.colors.push(r);
+			sideEffectObject.colors.push(g);
+			sideEffectObject.colors.push(b);
+			sideEffectObject.colors.push(a);
+		}
+	}
+
+	if (textureLabel)
+		sideEffectObject.textureLabel = textureLabel;
+
+	var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
+	for (var j = 0; j < indices.length; j++) {
+		sideEffectObject.indices.push(indices[j]+vertexCount);
+	}
+
+	if (normals) {
+		for (var j = 0; j < normals.length; j++) {
+			sideEffectObject.vertexNormals.push(normals[j]);
+		}
+	}
+
+	if (lightX || lightX === 0)
+		sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
+}
+
+var prepareAllData = function(data, sideEffectObject) {
+	for (var i = 0; i < data.length; i++) {
+		var drawCommand = data[i];
+
+		var vertices = drawCommand[0],
+			indices = drawCommand[1],
+			x = drawCommand[2] || 0,
+			y = drawCommand[3] || 0,
+			z = drawCommand[4] || 0,
+			xa = drawCommand[5],
+			ya = drawCommand[6],
+			za = drawCommand[7],
+			textureCoords = drawCommand[8],
+			textureLabel = drawCommand[9],
+			r = drawCommand[10],
+			g = drawCommand[11],
+			b = drawCommand[12],
+			a = drawCommand[13],
+			normals = drawCommand[14],
+			lightX = drawCommand[15],
+			lightY = drawCommand[16],
+			lightZ = drawCommand[17];
+
+		prepareData(
+			sideEffectObject,
+			vertices, indices, textureCoords, textureLabel,
+			x,y,z, xa,ya,za,
+			r,g,b,a,
+			normals, lightX, lightY, lightZ);
+	}
+}
+
 var render = function(tag, webgl, data) {
 	if (tag === "clearScreen") {
 		var gl = webgl.gl;
@@ -541,7 +627,7 @@ var render = function(tag, webgl, data) {
 
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	}
-	if (tag === "enableAlpha") {
+	else if (tag === "enableAlpha") {
 		var gl = webgl.gl;
 		// gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -554,174 +640,30 @@ var render = function(tag, webgl, data) {
 		gl.disable(gl.BLEND);
 		// gl.enable(gl.DEPTH_TEST);
 	}
-	else if (tag === "texturedSquare") {
-		var drawCommands = data;
+	else if (tag === "texturedPolygons") {
+		var modelData = {"vertices":[], "indices":[], "textureCoords":[]};
 
-		var squareData = generateSquareData();
+		prepareAllData(data, modelData);
 
-		var modelData = {"vertices":[], "textureCoords":[],"indices":[]};
-
-
-		for (var i = 0; i < drawCommands.length; i++) {
-			var drawCommand = drawCommands[i];
-
-			var x = drawCommand[1],
-				y = drawCommand[2],
-				z = drawCommand[3],
-				xa = drawCommand[4],
-				ya = drawCommand[5],
-				za = drawCommand[6];
-
-			for (var j = 0; j < squareData.vertices.length/3; j++) {
-				var squareVertex = [
-					squareData.vertices[j*3],
-					squareData.vertices[j*3+1],
-					squareData.vertices[j*3+2]
-				];
-
-				var tempVertex = rotate3d(squareVertex, xa, ya, za);
-
-				tempVertex = translate(tempVertex, x,y,z);
-
-				modelData.vertices.push(tempVertex[0]);
-				modelData.vertices.push(tempVertex[1]);
-				modelData.vertices.push(tempVertex[2]);
-
-				modelData.textureCoords.push(squareData.textureCoords[j*2]);
-				modelData.textureCoords.push(squareData.textureCoords[j*2+1]);
-			}
-
-			var vertexCount = squareData.vertices.length/3;
-			for (var j = 0; j < squareData.indices.length; j++) {
-				modelData.indices.push(squareData.indices[j]+vertexCount*i);
-			}
-		}
-
-		var textureLabel = drawCommands[0][0];
-		if (textureLabel === "wireframe")
+		if (modelData.textureLabel === "wireframe")
 			renderWireframePolygons(webgl, modelData)
 		else
-			renderTexturedPolygons(webgl, textureLabel, modelData);
+			renderTexturedPolygons(webgl, modelData);
 	}
 	else if (tag === "coloredPolygons") {
+		var modelData = {"vertices":[], "indices":[], "colors":[]};
 
-		var drawCommands = data;
+		prepareAllData(data, modelData);
 
-		var squareData = generateSquareData();
-
-		var modelData = {"vertices":[], "colors":[],"indices":[]};
-
-
-		for (var i = 0; i < drawCommands.length; i++) {
-			var drawCommand = drawCommands[i];
-
-			var vertices = drawCommand[0],
-				indices = drawCommand[1],
-				r = drawCommand[2],
-				g = drawCommand[3],
-				b = drawCommand[4],
-				a = drawCommand[5],
-				x = drawCommand[6] || 0,
-				y = drawCommand[7] || 0,
-				z = drawCommand[8] || 0,
-				xa = drawCommand[9],
-				ya = drawCommand[10],
-				za = drawCommand[11];
-
-			for (var j = 0; j < vertices.length/3; j++) {
-				var vertex = [
-					vertices[j*3],
-					vertices[j*3+1],
-					vertices[j*3+2]
-				];
-
-				var tempVertex = rotate3d(vertex, xa, ya, za);
-
-				tempVertex = translate(tempVertex, x,y,z);
-
-				modelData.vertices.push(tempVertex[0]);
-				modelData.vertices.push(tempVertex[1]);
-				modelData.vertices.push(tempVertex[2]);
-
-				modelData.colors.push(r);
-				modelData.colors.push(g);
-				modelData.colors.push(b);
-				modelData.colors.push(a);
-			}
-
-			var oldVertexCount = (modelData.vertices.length - vertices.length)/3 ;
-			for (var j = 0; j < indices.length; j++) {
-				modelData.indices.push(indices[j]+oldVertexCount);
-			}
-		}
-
-		renderColoredPolygons(webgl,  modelData);
+		renderColoredPolygons(webgl, modelData);
 	}
 	else if (tag === "coloredLitPolygons") {
-
-		var drawCommands = data;
-
-		var squareData = generateSquareData();
-
 		var modelData = {"vertices":[], "colors":[],"indices":[], "vertexNormals": []};
 
+		prepareAllData(data, modelData);
 
-		for (var i = 0; i < drawCommands.length; i++) {
-			var drawCommand = drawCommands[i];
-
-			var vertices = drawCommand[0],
-				indices = drawCommand[1],
-				normals = drawCommand[2],
-				lightX = drawCommand[3],
-				lightY = drawCommand[4],
-				lightZ = drawCommand[5],
-				r = drawCommand[6],
-				g = drawCommand[7],
-				b = drawCommand[8],
-				a = drawCommand[9],
-				x = drawCommand[10] || 0,
-				y = drawCommand[11] || 0,
-				z = drawCommand[12] || 0,
-				xa = drawCommand[13],
-				ya = drawCommand[14],
-				za = drawCommand[15];
-
-			for (var j = 0; j < vertices.length/3; j++) {
-				var vertex = [
-					vertices[j*3],
-					vertices[j*3+1],
-					vertices[j*3+2]
-				];
-
-				var tempVertex = rotate3d(vertex, xa, ya, za);
-
-				tempVertex = translate(tempVertex, x,y,z);
-
-				modelData.vertices.push(tempVertex[0]);
-				modelData.vertices.push(tempVertex[1]);
-				modelData.vertices.push(tempVertex[2]);
-
-				modelData.colors.push(r);
-				modelData.colors.push(g);
-				modelData.colors.push(b);
-				modelData.colors.push(a);
-			}
-
-			var oldVertexCount = (modelData.vertices.length - vertices.length)/3 ;
-			for (var j = 0; j < indices.length; j++) {
-				modelData.indices.push(indices[j]+oldVertexCount);
-			}
-
-			for (var j = 0; j < normals.length; j++) {
-				modelData.vertexNormals.push(normals[j]);
-			}
-
-			modelData.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
-		}
-
-		renderColoredLitPolygons(webgl,  modelData);
+		renderColoredLitPolygons(webgl, modelData);
 	}
-
 }
 
 window.onload = function() {
@@ -786,13 +728,14 @@ window.onload = function() {
 				internalData.drawQueue.push({"tag":"disableAlpha"});
 			},
 			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
-				internalData.drawQueue.push({"tag":"texturedSquare", "data":[label, x,y,z, xa,ya,za]});
+				var squareData = generateSquareData();
+				internalData.drawQueue.push({"tag":"texturedPolygons", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, squareData.textureCoords, label]});
 			},
 			"renderColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
-				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, r,g,b,a, x,y,z, xa,ya,za]});
+				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a]});
 			},
 			"renderColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
-				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za]});
+				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
 			}
 		};
 
@@ -868,8 +811,8 @@ window.onload = function() {
 					drawCommand = internalData.drawQueue[i].data;
 
 				var identifier = tag;
-				if (tag === "texturedSquare")
-					identifier += drawCommand[0]; //textureLabel
+				if (tag === "texturedPolygons")
+					identifier += drawCommand[9]; //textureLabel
 
 				if (oldIdentifier === null) {
 					temp.push(drawCommand);
