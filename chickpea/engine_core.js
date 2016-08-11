@@ -201,7 +201,6 @@ function getShader(gl, type, code) {
 	return shader;
 }
 
-
 function getProgram(gl, vertexShaderCode, fragmentShaderCode) {
 	var vertexShader = getShader(gl, gl.VERTEX_SHADER, vertexShaderCode);
 	var fragmentShader = getShader(gl, gl.FRAGMENT_SHADER, fragmentShaderCode);
@@ -224,7 +223,7 @@ function degToRad(degrees) {
 }
 
 
-function makeImageRequest(label, url) {
+function makeImagePromise(label, url) {
 	return new Promise(function (resolve, reject) {
 		var image = document.createElement("img");
 
@@ -333,14 +332,34 @@ function rotate3d(point, xAngle, yAngle, zAngle) {
 }
 
 
-function renderWireframePolygons(webgl, modelData) {
+function renderUsingShaderProgram(tag, webgl, modelData) {
 	var gl = webgl.gl;
 
-	var program = webgl.programs.wireframe;
+	var program,
+		renderingType = gl.TRIANGLES;
+
+	if (tag === "texturedPolygons") {
+		program = webgl.programs.texture;
+
+		if (modelData.textureLabel === "wireframe") {
+			program = webgl.programs.wireframe;
+			renderingType = gl.LINE_LOOP;
+		}
+	}
+	else if (tag === "coloredPolygons")
+		program = webgl.programs.colored;
+	else if (tag === "coloredLitPolygons")
+		program = webgl.programs.coloredLit;
+
 
 	var model = generateModel(modelData);
 
 	gl.useProgram(program);
+
+
+	var additionalVertexAttribCount = 0;
+	var bufferArray = []
+
 
 	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
 	gl.enableVertexAttribArray(vertexAttribute);
@@ -348,157 +367,41 @@ function renderWireframePolygons(webgl, modelData) {
 	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
 	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
 	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
-
-
-	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
-
-	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
-	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
-
-
-	var glIndicesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
-
-
-	gl.drawElements(gl.LINE_LOOP, model.indicesItems, gl.UNSIGNED_SHORT, 0);
-
-
-	gl.deleteBuffer(glVerticesBuffer);
-	gl.deleteBuffer(glIndicesBuffer);
-}
-
-function renderTexturedPolygons(webgl, modelData) {
-	var gl = webgl.gl;
-
-	var program = webgl.programs.texture;
-
-	var model = generateModel(modelData);
-
-	gl.useProgram(program);
-
-	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
-	gl.enableVertexAttribArray(vertexAttribute);
-	var glVerticesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
-
-	var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
-	gl.enableVertexAttribArray(textureCoordsAttribute);
-	var glTextureCoordsBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
-
-	var samplerUniform = gl.getUniformLocation(program, "uSampler");
-	gl.activeTexture(gl.TEXTURE1);
-	gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
-	gl.uniform1i(samplerUniform, 1);
-
-
-	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
-
-	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
-	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
-
-
-	var glIndicesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
-
-
-	gl.drawElements(gl.TRIANGLES, model.indicesItems, gl.UNSIGNED_SHORT, 0);
-
-
-	gl.deleteBuffer(glVerticesBuffer);
-	gl.deleteBuffer(glTextureCoordsBuffer);
-	gl.deleteBuffer(glIndicesBuffer);
-
-	gl.disableVertexAttribArray(1);
-}
-
-function renderColoredPolygons(webgl, modelData) {
-	var gl = webgl.gl;
-
-	var program = webgl.programs.colored;
-
-
-	var model = generateModel(modelData);
-
-	gl.useProgram(program);
-
-	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
-	gl.enableVertexAttribArray(vertexAttribute);
-	var glVerticesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
-
-	var colorAttribute = gl.getAttribLocation(program, "aColor");
-	gl.enableVertexAttribArray(colorAttribute);
-	var glColorBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
-
-
-	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
-
-	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
-	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
-
-
-	var glIndicesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
-
-
-	var renderingType = gl.TRIANGLES;
-	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
-
-
-	gl.deleteBuffer(glVerticesBuffer);
-	gl.deleteBuffer(glColorBuffer);
-	gl.deleteBuffer(glIndicesBuffer);
-
-	gl.disableVertexAttribArray(1);
-}
-
-function renderColoredLitPolygons(webgl, modelData) {
-	var gl = webgl.gl;
-
-	var program = webgl.programs.coloredLit;
-
-
-	var model = generateModel(modelData);
-
-	gl.useProgram(program);
-
-	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
-	gl.enableVertexAttribArray(vertexAttribute);
-	var glVerticesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+	bufferArray.push(glVerticesBuffer);
 
 
 	var vertexNormalAttribute = gl.getAttribLocation(program, "aVertexNormal");
-	gl.enableVertexAttribArray(vertexNormalAttribute);
-	var glVertexNormalsBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
+	if (vertexNormalAttribute !== -1) {
+		gl.enableVertexAttribArray(vertexNormalAttribute);
+		var glVertexNormalsBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
+		gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
+		additionalVertexAttribCount++;
+		bufferArray.push(glVertexNormalsBuffer);
+	}
 
 	var colorAttribute = gl.getAttribLocation(program, "aColor");
-	gl.enableVertexAttribArray(colorAttribute);
-	var glColorBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
+	if (colorAttribute !== -1) {
+		gl.enableVertexAttribArray(colorAttribute);
+		var glColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
+		gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
+		additionalVertexAttribCount++;
+		bufferArray.push(glColorBuffer);
+	}
+
+	var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
+	if (textureCoordsAttribute !== -1) {
+		gl.enableVertexAttribArray(textureCoordsAttribute);
+		var glTextureCoordsBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STREAM_DRAW);
+		gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
+		additionalVertexAttribCount++;
+		bufferArray.push(glTextureCoordsBuffer);
+	}
 
 
 	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
@@ -508,31 +411,42 @@ function renderColoredLitPolygons(webgl, modelData) {
 	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
 
 
+	var samplerUniform = gl.getUniformLocation(program, "uSampler");
+	if (samplerUniform !== null) {
+		gl.activeTexture(gl.TEXTURE1);
+		gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
+		gl.uniform1i(samplerUniform, 1);
+	}
+
+
 	var normalMatrixUniform = gl.getUniformLocation(program, "uNMatrix");
-	gl.uniformMatrix3fv(normalMatrixUniform, false, webgl.normalMatrix);
+	if (normalMatrixUniform !== null)
+		gl.uniformMatrix3fv(normalMatrixUniform, false, webgl.normalMatrix);
 
 	var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
-	var lightPos = modelData.lightPos;
-	gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
-
+	if (lightPositionUniform !== null) {
+		var lightPos = modelData.lightPos;
+		gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
+	}
 
 
 
 	var glIndicesBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
+	bufferArray.push(glIndicesBuffer)
 
 
-	var renderingType = gl.TRIANGLES;
 	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
 
 
-	gl.deleteBuffer(glVerticesBuffer);
-	gl.deleteBuffer(glColorBuffer);
-	gl.deleteBuffer(glIndicesBuffer);
+	//cleaning up
+	for (var i = 0; i < bufferArray.length; i++) {
+		gl.deleteBuffer(bufferArray[i]);
+	}
 
-	gl.disableVertexAttribArray(2);
-	gl.disableVertexAttribArray(1);
+	for (var i = additionalVertexAttribCount; i > 0; i--)
+		gl.disableVertexAttribArray(i);
 }
 
 var prepareData = function(
@@ -586,7 +500,9 @@ var prepareData = function(
 		sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
 }
 
-var prepareAllData = function(data, sideEffectObject) {
+var prepareAllData = function(data) {
+	var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
+
 	for (var i = 0; i < data.length; i++) {
 		var drawCommand = data[i];
 
@@ -610,16 +526,43 @@ var prepareAllData = function(data, sideEffectObject) {
 			lightZ = drawCommand[17];
 
 		prepareData(
-			sideEffectObject,
+			modelData,
 			vertices, indices, textureCoords, textureLabel,
 			x,y,z, xa,ya,za,
 			r,g,b,a,
 			normals, lightX, lightY, lightZ);
 	}
+
+	return modelData;
 }
 
 var render = function(tag, webgl, data) {
-	if (tag === "clearScreen") {
+	if (tag === "setCamera") {
+		var x = data[data.length-1].x,
+			y = data[data.length-1].y,
+			z = data[data.length-1].z;
+
+		webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
+		webgl.unprojectVMatrix = mat4.lookAt([x,-y,z], [x,-y,0], [0,1,0]);
+
+		var normalMatrix = mat3.create();
+		mat4.toInverseMat3(webgl.vMatrix, normalMatrix);
+		mat3.transpose(normalMatrix);
+		webgl.normalMatrix = normalMatrix;
+	}
+	else if (tag === "setViewport") {
+		var width = data[data.length-1].width,
+			height = data[data.length-1].height;
+
+		webgl.canvas.width = width;
+		webgl.canvas.height = height;
+
+		webgl.pMatrix = mat4.create();
+		mat4.perspective(45, width / height, 0.1, 100.0, webgl.pMatrix);
+
+		webgl.gl.viewport(0, 0, width, height);
+	}
+	else if (tag === "clearScreen") {
 		var gl = webgl.gl;
 		var color = data[data.length-1];
 
@@ -633,37 +576,61 @@ var render = function(tag, webgl, data) {
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 		gl.enable(gl.BLEND);
-		// gl.disable(gl.DEPTH_TEST);
 	}
 	else if (tag === "disableAlpha") {
-		var gl = webgl.gl;
-		gl.disable(gl.BLEND);
-		// gl.enable(gl.DEPTH_TEST);
+		webgl.gl.disable(webgl.gl.BLEND);
 	}
-	else if (tag === "texturedPolygons") {
-		var modelData = {"vertices":[], "indices":[], "textureCoords":[]};
-
-		prepareAllData(data, modelData);
-
-		if (modelData.textureLabel === "wireframe")
-			renderWireframePolygons(webgl, modelData)
-		else
-			renderTexturedPolygons(webgl, modelData);
+	else if (tag === "enableDepth") {
+		webgl.gl.enable(webgl.gl.DEPTH_TEST);
 	}
-	else if (tag === "coloredPolygons") {
-		var modelData = {"vertices":[], "indices":[], "colors":[]};
-
-		prepareAllData(data, modelData);
-
-		renderColoredPolygons(webgl, modelData);
+	else if (tag === "disableDepth") {
+		webgl.gl.disable(webgl.gl.DEPTH_TEST);
 	}
-	else if (tag === "coloredLitPolygons") {
-		var modelData = {"vertices":[], "colors":[],"indices":[], "vertexNormals": []};
+	else if (tag === "texturedPolygons"
+			|| tag === "coloredPolygons"
+			|| tag === "coloredLitPolygons" ) {
+		var modelData = prepareAllData(data);
 
-		prepareAllData(data, modelData);
-
-		renderColoredLitPolygons(webgl, modelData);
+		renderUsingShaderProgram(tag, webgl, modelData);
 	}
+}
+
+var processQueuedCommands = function(internalData) {
+	var oldTag = null,
+		oldIdentifier = null;
+
+
+	var temp = [];
+
+	for (var i = 0; i < internalData.drawQueue.length; i++) {
+		var tag = internalData.drawQueue[i].tag,
+			drawCommand = internalData.drawQueue[i].data;
+
+		var identifier = tag;
+		if (tag === "texturedPolygons")
+			identifier += drawCommand[9]; //textureLabel
+
+		if (oldIdentifier === null) {
+			temp.push(drawCommand);
+		}
+		else if (identifier === oldIdentifier) {
+			temp.push(drawCommand);
+		}
+		else if (identifier !== oldIdentifier) {
+			render(oldTag, internalData.webgl, temp);
+			temp = [];
+			temp.push(drawCommand);
+		}
+
+		if (i === internalData.drawQueue.length - 1) {
+			render(tag, internalData.webgl, temp);
+		}
+
+		oldTag = tag;
+		oldIdentifier = identifier;
+	}
+
+	internalData.drawQueue = [];
 }
 
 window.onload = function() {
@@ -699,23 +666,10 @@ window.onload = function() {
 				return [internalData.webgl.canvas.width, internalData.webgl.canvas.height];
 			},
 			"setViewport": function(width, height) {
-				internalData.webgl.canvas.width = width;
-				internalData.webgl.canvas.height = height;
-
-				var gl = internalData.webgl.gl;
-				internalData.webgl.pMatrix = mat4.create();
-				mat4.perspective(45, width / height, 0.1, 100.0, internalData.webgl.pMatrix);
-
-				gl.viewport(0, 0, width, height);				
+				internalData.drawQueue.push({"tag":"setViewport", data: {"width": width, "height": height}});
 			},
 			"setCamera": function(x, y, z) {
-				internalData.webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
-				internalData.webgl.unprojectVMatrix = mat4.lookAt([x,-y,z], [x,-y,0], [0,1,0]);
-
-				var normalMatrix = mat3.create();
-				mat4.toInverseMat3(internalData.webgl.vMatrix, normalMatrix);
-				mat3.transpose(normalMatrix);
-				internalData.webgl.normalMatrix = normalMatrix;
+				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z}});
 			},
 			"clearScreen": function(r, g, b) {
 				internalData.drawQueue.push({"tag":"clearScreen", data: {"r": r, "g": g, "b":b}});
@@ -726,6 +680,13 @@ window.onload = function() {
 			},
 			"disableAlphaBlending": function() {
 				internalData.drawQueue.push({"tag":"disableAlpha"});
+			},
+			"enableDepthTesting": function() {
+				//http://delphic.me.uk/webglalpha.html
+				internalData.drawQueue.push({"tag":"enableDepth"});
+			},
+			"disableDepthTesting": function() {
+				internalData.drawQueue.push({"tag":"disableDepth"});
 			},
 			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
 				var squareData = generateSquareData();
@@ -738,9 +699,6 @@ window.onload = function() {
 				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
 			}
 		};
-
-		init(globalData, nativeFunctions);
-
 
 		var cacheImages = function(array) {
 			for (var i = 0; i < array.length; i++) {
@@ -757,7 +715,7 @@ window.onload = function() {
 
 			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
 				var imageData = internalData.imagesDataArray[i];
-				requestArray.push(makeImageRequest(imageData.label, "resources/"+imageData.path));
+				requestArray.push(makeImagePromise(imageData.label, "resources/"+imageData.path));
 			}
 
 			var imagePromises = 
@@ -800,41 +758,7 @@ window.onload = function() {
 
 			globalData.render();
 
-			var oldTag = null,
-				oldIdentifier = null;
-
-
-			var temp = [];
-
-			for (var i = 0; i < internalData.drawQueue.length; i++) {
-				var tag = internalData.drawQueue[i].tag,
-					drawCommand = internalData.drawQueue[i].data;
-
-				var identifier = tag;
-				if (tag === "texturedPolygons")
-					identifier += drawCommand[9]; //textureLabel
-
-				if (oldIdentifier === null) {
-					temp.push(drawCommand);
-				}
-				else if (identifier === oldIdentifier) {
-					temp.push(drawCommand);
-				}
-				else if (identifier !== oldIdentifier) {
-					render(oldTag, internalData.webgl, temp);
-					temp = [];
-					temp.push(drawCommand);
-				}
-
-				if (i === internalData.drawQueue.length - 1) {
-					render(tag, internalData.webgl, temp);
-				}
-
-				oldTag = tag;
-				oldIdentifier = identifier;
-			}
-
-			internalData.drawQueue = [];
+			processQueuedCommands(internalData);
 
 			window.requestAnimationFrame(gameLoopCycle);
 		}
@@ -844,21 +768,23 @@ window.onload = function() {
 
 			var gl = getGLcontext(canvasElement);
 
-			var textureProgram = getProgram(gl, textureVertexShaderCode, textureFragmentShaderCode);
-			var wireframeProgram = getProgram(gl, wireframeVertexShaderCode, wireframeFragmentShaderCode);
-			var coloredProgram = getProgram(gl, coloredVertexShaderCode, coloredFragmentShaderCode);
-			var coloredLitProgram = getProgram(gl, coloredLitVertexShaderCode, coloredLitFragmentShaderCode);
+			var programData = [
+				["texture", textureVertexShaderCode, textureFragmentShaderCode],
+				["wireframe", wireframeVertexShaderCode, wireframeFragmentShaderCode],
+				["colored", coloredVertexShaderCode, coloredFragmentShaderCode],
+				["coloredLit", coloredLitVertexShaderCode, coloredLitFragmentShaderCode]
+			]
 
+			var programs = {};
+
+			for (var i = 0; i < programData.length; i++) {
+				programs[programData[i][0]] = getProgram(gl, programData[i][1], programData[i][2]);
+			}
 
 			internalData.webgl = {
 				"canvas": canvasElement,
 				"gl": gl,
-				"programs": {
-					"texture": textureProgram,
-					"wireframe": wireframeProgram,
-					"colored": coloredProgram,
-					"coloredLit": coloredLitProgram
-				},
+				"programs": programs,
 				"textures": {}
 			};
 
@@ -882,13 +808,7 @@ window.onload = function() {
 			window.onresize = onResize;
 
 
-			nativeFunctions.enableAlphaBlending();
-
-			nativeFunctions.setCamera(0,0,0);
-
-
-			gl.enable(gl.DEPTH_TEST);
-			// gl.enable(gl.CULL_FACE);
+			processQueuedCommands(internalData);
 
 
 			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
@@ -905,12 +825,14 @@ window.onload = function() {
 			canvasElement.onmousedown = function(e) {
 				globalData.addInput(["pressed", 0, e.offsetX, e.offsetY]);
 				internalData["mousePressed"] = true;
+				return false;
 			};
 
 			canvasElement.onmousemove = function(e) {
 				if (internalData.mousePressed) {
 					globalData.addInput(["move", 0, e.offsetX, e.offsetY]);
 				}
+				return false;
 			};
 
 			canvasElement.onmouseup = function(e) {
@@ -920,6 +842,10 @@ window.onload = function() {
 
 			window.requestAnimationFrame(gameLoopCycle);
 		}
+
+
+		//this method must be implemented by user
+		init(globalData, nativeFunctions);
 
 		promiseAllImages()
 			.then(promiseAllSounds())

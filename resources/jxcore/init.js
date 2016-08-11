@@ -95,7 +95,7 @@ function init(global, natives) {
 
 		natives.clearScreen(0.1, 0.2, 0.3);
 
-
+		natives.enableDepthTesting();
 		natives.disableAlphaBlending();
 
 		natives.renderColoredPolygons(
