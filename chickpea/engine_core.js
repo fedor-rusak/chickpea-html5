@@ -1,651 +1,688 @@
 "use strict";
 
-var generateModel = function(data) {
-	var result = {};
+var chickpea = function() {
 
-	if (data.vertices) {
-		result["verticesBuffer"] = new Float32Array(data.vertices);
-		result["verticesItemSize"] = 3;
-	}
+	function generateModel(data) {
+		var result = {};
 
-	if (data.textureCoords) {
-		result["textureCoordsBuffer"] = new Float32Array(data.textureCoords);
-		result["textureCoordsItemSize"] = 2;
-	}
-
-	if (data.textureLabel)
-		result["textureLabel"] = data.textureLabel;
-
-	if (data.colors) {
-		result["colorBuffer"] = new Float32Array(data.colors);
-		result["colorItemSize"] = 4;
-	}
-
-	if (data.indices) {
-		result["indicesBuffer"] = new Uint16Array(data.indices);
-		result["indicesItems"] = data.indices.length;
-	}
-
-	if (data.vertexNormals) {
-		result["vertexNormalsBuffer"] = new Float32Array(data.vertexNormals);
-		result["vertexNormalItemSize"] = 3;
-	}
-
-	if (data.lightPos) {
-		result["lightPos"] = data.lightPos;
-	}
-
-	return result;
-}
-
-function generateSquareData() {
-	return {
-		"vertices": [
-			-1.0, -1.0, 0.0,
-			-1.0,  1.0, 0.0,
-			 1.0, -1.0, 0.0,
-			 1.0,  1.0, 0.0
-		],
-		"textureCoords": [
-			0.0, 1.0,
-			0.0, 0.0,
-			1.0, 1.0,
-			1.0, 0.0,
-		],
-		"indices": [
-			0, 1, 2,  1, 3, 2
-		]
-	};
-};
-
-var textureVertexShaderCode =
-	"attribute vec3 aVertexPosition;"+
-	"attribute vec2 aTextureCoord;"+
-
-	"uniform mat4 uMVMatrix;"+
-	"uniform mat4 uPMatrix;"+
-
-	"varying vec2 vTextureCoord;"+
-
-
-	"void main(void) {"+
-	"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
-	"	vTextureCoord = aTextureCoord;"+
-	"}";
-
-var textureFragmentShaderCode =
-	"precision mediump float;"+
-
-	"varying vec2 vTextureCoord;"+
-
-	"uniform sampler2D uSampler;"+
-
-	"void main(void) {"+
-	"	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));"+
-	"}";
-
-var wireframeVertexShaderCode =
-	"attribute vec3 aVertexPosition;"+
-
-	"uniform mat4 uMVMatrix;"+
-	"uniform mat4 uPMatrix;"+
-
-	"void main(void) {"+
-	"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
-	"}";
-
-var wireframeFragmentShaderCode =
-	"precision mediump float;"+
-
-	"void main(void) {"+
-	"	gl_FragColor = vec4(0.1, 0.2, 0.3, 0.4);" +
-	"}";
-
-var coloredVertexShaderCode =
-	"attribute vec3 aVertexPosition;"+
-	"attribute vec4 aColor;"+
-
-	"uniform mat4 uMVMatrix;"+
-	"uniform mat4 uPMatrix;"+
-
-	"varying vec4 vColor;"+
-
-
-	"void main(void) {"+
-	"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
-	"	vColor = aColor;"+
-	"}";
-
-var coloredFragmentShaderCode =
-	"precision mediump float;"+
-
-	"varying vec4 vColor;"+
-
-	"void main(void) {"+
-	"	gl_FragColor = vColor;"+
-	"}";
-
-var coloredLitVertexShaderCode =
-	"attribute vec3 aVertexPosition;"+
-	"attribute vec3 aVertexNormal;"+
-	"attribute vec4 aColor;"+
-
-	"uniform mat4 uMVMatrix;"+
-	"uniform mat4 uPMatrix;"+
-	"uniform mat3 uNMatrix;"+
-
-	"varying vec4 vPosition;"+
-	"varying vec4 vColor;"+
-	"varying vec3 vTransformedNormal;"+
-
-
-	"void main(void) {"+
-	"	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);"+
-	"	gl_Position = uPMatrix * vPosition;"+
-	"	vTransformedNormal = uNMatrix * aVertexNormal;"+
-	"	vColor = aColor;"+
-	"}";
-
-var coloredLitFragmentShaderCode =
-	"precision mediump float;"+
-
-	"uniform vec3 uLightPosition;"+
-
-	"varying vec4 vPosition;"+
-	"varying vec4 vColor;"+
-	"varying vec3 vTransformedNormal;"+
-
-
-	"void main(void) {"+
-	"	vec3 lightDirection = normalize(uLightPosition - vPosition.xyz);"+
-
-	"	float directionalLightWeighting = max(dot(normalize(vTransformedNormal), lightDirection), 0.0);"+
-	"	vec3 lightWeighting = vec3(0.2,0.2,0.2)+vec3(0.8,0.8,0.8) * directionalLightWeighting;"+
-
-	"	gl_FragColor = vec4(vColor.rgb * lightWeighting, vColor.a);"+
-	"}";
-
-
-function getGLcontext(canvas) {
-	var gl;
-
-	try {
-		gl = canvas.getContext("experimental-webgl");
-	}
-	catch (e) {}
-
-	return gl;
-}
-
-function getShader(gl, type, code) {
-
-	var shader;
-	if (type === gl.FRAGMENT_SHADER) {
-		shader = gl.createShader(gl.FRAGMENT_SHADER);
-	}
-	else if (type === gl.VERTEX_SHADER) {
-		shader = gl.createShader(gl.VERTEX_SHADER);
-	}
-	else {
-		return null;
-	}
-
-	gl.shaderSource(shader, code);
-	gl.compileShader(shader);
-
-	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-		alert(gl.getShaderInfoLog(shader));
-		return null;
-	}
-
-	return shader;
-}
-
-function getProgram(gl, vertexShaderCode, fragmentShaderCode) {
-	var vertexShader = getShader(gl, gl.VERTEX_SHADER, vertexShaderCode);
-	var fragmentShader = getShader(gl, gl.FRAGMENT_SHADER, fragmentShaderCode);
-
-	var program = gl.createProgram();
-	gl.attachShader(program, vertexShader);
-	gl.attachShader(program, fragmentShader);
-	gl.linkProgram(program);
-
-	if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-		alert("Could not link program!");
-	}
-
-	return program;
-}
-
-
-function degToRad(degrees) {
-	return degrees * Math.PI / 180;
-}
-
-
-function makeImagePromise(label, url) {
-	return new Promise(function (resolve, reject) {
-		var image = document.createElement("img");
-
-		image.onload = function () {
-			if ('naturalHeight' in this && this.naturalHeight + this.naturalWidth === 0) {
-				reject({"status": "noImage", "statusText": "error loading " + url});
-			}
-			else if (this.width + this.height == 0) {
-				reject({"status": "noImage", "statusText": "error loading " + url});
-			}
-			else {
-				resolve({"label": label, "dom": image});
-			}
-		};
-
-		image.src = url;
-	});
-};
-
-var makeSoundRequest = function(label, url) {
-	return Promise.resolve({"label": label, "dom": label});
-}
-
-function unprojectOnZeroLevel(x, y, unprojectVMatrix, pMatrix, viewport) {
-	var near = unproject(x,y,0, unprojectVMatrix, pMatrix, viewport),
-		far = unproject(x,y,1, unprojectVMatrix, pMatrix, viewport);
-
-	var t = -near[2] / (far[2] - near[2]);
-//		float tempZ = near[2] + (far[2] - near[2]) * t;
-	var mapClickX = near[0] + (far[0] - near[0]) * t;
-	var mapClickY = -(near[1] + (far[1] - near[1]) * t);
-
-	return [mapClickX, mapClickY];
-}
-
-function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
-	var x = 2 * (winX - viewport[0])/viewport[2] - 1,
-		y = 2 * (winY - viewport[1])/viewport[3] - 1,
-		z = 2 * winZ - 1;
-
-	var vpMatrix = mat4.create();
-	mat4.multiply(pMatrix, mvMatrix, vpMatrix);
-
-	var invMatrix = mat4.create();
-	mat4.inverse(vpMatrix, invMatrix);
-
-	var n = [x,y,z,1];
-	mat4.multiplyVec4(invMatrix,n,n);
-
-	return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
-}
-
-function generateGlTexture(gl, imageData, withAlphaChannel) {
-	var imageFormat = gl.RGB;
-
-	if (withAlphaChannel)
-		imageFormat = gl.RGBA;
-
-	var glTexture = gl.createTexture();
-	gl.bindTexture(gl.TEXTURE_2D, glTexture);
-	// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-	gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, imageData);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-	gl.bindTexture(gl.TEXTURE_2D, null);
-
-	return glTexture;
-}
-
-function translate(point, x, y, z) {
-	return [point[0]+x, point[1]+y, point[2]+z];
-}
-
-function rotate2d(x, y, angle) {
-	return [
-		x*Math.cos(angle)-y*Math.sin(angle),
-		x*Math.sin(angle)+y*Math.cos(angle)
-	];
-}
-
-function rotate3d(point, xAngle, yAngle, zAngle) {
-	var result = [point[0],point[1],point[2]];
-
-	if (xAngle !== undefined && xAngle !== 0) {
-		var xRotated = rotate2d(result[1],result[2], degToRad(xAngle));
-		result[1] = xRotated[0];
-		result[2] = xRotated[1];
-	}
-
-	if (yAngle !== undefined && yAngle !== 0) {
-		var yRotated = rotate2d(result[0],result[2], -degToRad(yAngle));
-		result[0] = yRotated[0];
-		result[2] = yRotated[1];
-	}
-
-	if (zAngle !== undefined && zAngle !== 0) {
-		var zRotated = rotate2d(result[0],result[1], degToRad(zAngle));
-		result[0] = zRotated[0];
-		result[1] = zRotated[1];
-	}
-
-	return result;
-}
-
-
-function renderUsingShaderProgram(tag, webgl, modelData) {
-	var gl = webgl.gl;
-
-	var program,
-		renderingType = gl.TRIANGLES;
-
-	if (tag === "texturedPolygons") {
-		program = webgl.programs.texture;
-
-		if (modelData.textureLabel === "wireframe") {
-			program = webgl.programs.wireframe;
-			renderingType = gl.LINE_LOOP;
+		if (data.vertices) {
+			result["verticesBuffer"] = new Float32Array(data.vertices);
+			result["verticesItemSize"] = 3;
 		}
-	}
-	else if (tag === "coloredPolygons")
-		program = webgl.programs.colored;
-	else if (tag === "coloredLitPolygons")
-		program = webgl.programs.coloredLit;
 
+		if (data.textureCoords) {
+			result["textureCoordsBuffer"] = new Float32Array(data.textureCoords);
+			result["textureCoordsItemSize"] = 2;
+		}
 
-	var model = generateModel(modelData);
+		if (data.textureLabel)
+			result["textureLabel"] = data.textureLabel;
 
-	gl.useProgram(program);
+		if (data.colors) {
+			result["colorBuffer"] = new Float32Array(data.colors);
+			result["colorItemSize"] = 4;
+		}
 
+		if (data.indices) {
+			result["indicesBuffer"] = new Uint16Array(data.indices);
+			result["indicesItems"] = data.indices.length;
+		}
 
-	var additionalVertexAttribCount = 0;
-	var bufferArray = []
+		if (data.vertexNormals) {
+			result["vertexNormalsBuffer"] = new Float32Array(data.vertexNormals);
+			result["vertexNormalItemSize"] = 3;
+		}
 
+		if (data.lightPos) {
+			result["lightPos"] = data.lightPos;
+		}
 
-	var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
-	gl.enableVertexAttribArray(vertexAttribute);
-	var glVerticesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-	gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
-	gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
-	bufferArray.push(glVerticesBuffer);
-
-
-	var vertexNormalAttribute = gl.getAttribLocation(program, "aVertexNormal");
-	if (vertexNormalAttribute !== -1) {
-		gl.enableVertexAttribArray(vertexNormalAttribute);
-		var glVertexNormalsBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
-		gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
-		additionalVertexAttribCount++;
-		bufferArray.push(glVertexNormalsBuffer);
+		return result;
 	}
 
-	var colorAttribute = gl.getAttribLocation(program, "aColor");
-	if (colorAttribute !== -1) {
-		gl.enableVertexAttribArray(colorAttribute);
-		var glColorBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
-		gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
-		additionalVertexAttribCount++;
-		bufferArray.push(glColorBuffer);
+	function generateSquareModelData() {
+		return {
+			"vertices": [
+				-1.0, -1.0, 0.0,
+				-1.0,  1.0, 0.0,
+				 1.0, -1.0, 0.0,
+				 1.0,  1.0, 0.0
+			],
+			"textureCoords": [
+				0.0, 1.0,
+				0.0, 0.0,
+				1.0, 1.0,
+				1.0, 0.0,
+			],
+			"indices": [
+				0, 1, 2,  1, 3, 2
+			]
+		};
+	};
+
+
+	function getGLcontext(canvas) {
+		var gl;
+
+		try {
+			gl = canvas.getContext("experimental-webgl");
+		}
+		catch (e) {}
+
+		return gl;
 	}
 
-	var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
-	if (textureCoordsAttribute !== -1) {
-		gl.enableVertexAttribArray(textureCoordsAttribute);
-		var glTextureCoordsBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STREAM_DRAW);
-		gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
-		additionalVertexAttribCount++;
-		bufferArray.push(glTextureCoordsBuffer);
+	function getShader(gl, type, code) {
+
+		var shader;
+		if (type === gl.FRAGMENT_SHADER) {
+			shader = gl.createShader(gl.FRAGMENT_SHADER);
+		}
+		else if (type === gl.VERTEX_SHADER) {
+			shader = gl.createShader(gl.VERTEX_SHADER);
+		}
+		else {
+			return null;
+		}
+
+		gl.shaderSource(shader, code);
+		gl.compileShader(shader);
+
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			alert(gl.getShaderInfoLog(shader));
+			return null;
+		}
+
+		return shader;
 	}
 
+	function getProgram(gl, vertexShaderCode, fragmentShaderCode) {
+		var vertexShader = getShader(gl, gl.VERTEX_SHADER, vertexShaderCode);
+		var fragmentShader = getShader(gl, gl.FRAGMENT_SHADER, fragmentShaderCode);
 
-	var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
-	gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
+		var program = gl.createProgram();
+		gl.attachShader(program, vertexShader);
+		gl.attachShader(program, fragmentShader);
+		gl.linkProgram(program);
 
-	var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
-	gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+			alert("Could not link program!");
+		}
 
-
-	var samplerUniform = gl.getUniformLocation(program, "uSampler");
-	if (samplerUniform !== null) {
-		gl.activeTexture(gl.TEXTURE1);
-		gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
-		gl.uniform1i(samplerUniform, 1);
+		return program;
 	}
 
+	function generatePrograms(gl) {
+		var textureVertexShaderCode =
+			"attribute vec3 aVertexPosition;"+
+			"attribute vec2 aTextureCoord;"+
 
-	var normalMatrixUniform = gl.getUniformLocation(program, "uNMatrix");
-	if (normalMatrixUniform !== null)
-		gl.uniformMatrix3fv(normalMatrixUniform, false, webgl.normalMatrix);
+			"uniform mat4 uMVMatrix;"+
+			"uniform mat4 uPMatrix;"+
 
-	var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
-	if (lightPositionUniform !== null) {
-		var lightPos = modelData.lightPos;
-		gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
-	}
-
+			"varying vec2 vTextureCoord;"+
 
 
-	var glIndicesBuffer = gl.createBuffer();
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
-	bufferArray.push(glIndicesBuffer)
+			"void main(void) {"+
+			"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
+			"	vTextureCoord = aTextureCoord;"+
+			"}";
+
+		var textureFragmentShaderCode =
+			"precision mediump float;"+
+
+			"varying vec2 vTextureCoord;"+
+
+			"uniform sampler2D uSampler;"+
+
+			"void main(void) {"+
+			"	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));"+
+			"}";
+
+		var wireframeVertexShaderCode =
+			"attribute vec3 aVertexPosition;"+
+
+			"uniform mat4 uMVMatrix;"+
+			"uniform mat4 uPMatrix;"+
+
+			"void main(void) {"+
+			"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
+			"}";
+
+		var wireframeFragmentShaderCode =
+			"precision mediump float;"+
+
+			"void main(void) {"+
+			"	gl_FragColor = vec4(0.1, 0.2, 0.3, 0.4);" +
+			"}";
+
+		var coloredVertexShaderCode =
+			"attribute vec3 aVertexPosition;"+
+			"attribute vec4 aColor;"+
+
+			"uniform mat4 uMVMatrix;"+
+			"uniform mat4 uPMatrix;"+
+
+			"varying vec4 vColor;"+
 
 
-	gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+			"void main(void) {"+
+			"	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);"+
+			"	vColor = aColor;"+
+			"}";
+
+		var coloredFragmentShaderCode =
+			"precision mediump float;"+
+
+			"varying vec4 vColor;"+
+
+			"void main(void) {"+
+			"	gl_FragColor = vColor;"+
+			"}";
+
+		var coloredLitVertexShaderCode =
+			"attribute vec3 aVertexPosition;"+
+			"attribute vec3 aVertexNormal;"+
+			"attribute vec4 aColor;"+
+
+			"uniform mat4 uMVMatrix;"+
+			"uniform mat4 uPMatrix;"+
+			"uniform mat3 uNMatrix;"+
+
+			"varying vec4 vPosition;"+
+			"varying vec4 vColor;"+
+			"varying vec3 vTransformedNormal;"+
 
 
-	//cleaning up
-	for (var i = 0; i < bufferArray.length; i++) {
-		gl.deleteBuffer(bufferArray[i]);
-	}
+			"void main(void) {"+
+			"	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);"+
+			"	gl_Position = uPMatrix * vPosition;"+
+			"	vTransformedNormal = uNMatrix * aVertexNormal;"+
+			"	vColor = aColor;"+
+			"}";
 
-	for (var i = additionalVertexAttribCount; i > 0; i--)
-		gl.disableVertexAttribArray(i);
-}
+		var coloredLitFragmentShaderCode =
+			"precision mediump float;"+
 
-var prepareData = function(
-	sideEffectObject, vertices, indices, textureCoords, textureLabel,
-	x,y,z, xa,ya,za, r,g,b,a,
-	normals, lightX, lightY, lightZ) {
+			"uniform vec3 uLightPosition;"+
 
-	for (var j = 0; j < vertices.length/3; j++) {
-		var squareVertex = [
-			vertices[j*3],
-			vertices[j*3+1],
-			vertices[j*3+2]
+			"varying vec4 vPosition;"+
+			"varying vec4 vColor;"+
+			"varying vec3 vTransformedNormal;"+
+
+
+			"void main(void) {"+
+			"	vec3 lightDirection = normalize(uLightPosition - vPosition.xyz);"+
+
+			"	float directionalLightWeighting = max(dot(normalize(vTransformedNormal), lightDirection), 0.0);"+
+			"	vec3 lightWeighting = vec3(0.2,0.2,0.2)+vec3(0.8,0.8,0.8) * directionalLightWeighting;"+
+
+			"	gl_FragColor = vec4(vColor.rgb * lightWeighting, vColor.a);"+
+			"}";
+
+		var programData = [
+			["texture", textureVertexShaderCode, textureFragmentShaderCode],
+			["wireframe", wireframeVertexShaderCode, wireframeFragmentShaderCode],
+			["colored", coloredVertexShaderCode, coloredFragmentShaderCode],
+			["coloredLit", coloredLitVertexShaderCode, coloredLitFragmentShaderCode]
 		];
 
-		var tempVertex = rotate3d(squareVertex, xa, ya, za);
+		var programs = {};
 
-		tempVertex = translate(tempVertex, x,y,z);
-
-		sideEffectObject.vertices.push(tempVertex[0]);
-		sideEffectObject.vertices.push(tempVertex[1]);
-		sideEffectObject.vertices.push(tempVertex[2]);
-
-		if (textureCoords) {
-			sideEffectObject.textureCoords.push(textureCoords[j*2]);
-			sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
+		for (var i = 0; i < programData.length; i++) {
+			programs[programData[i][0]] = getProgram(gl, programData[i][1], programData[i][2]);
 		}
 
-		if (r || r === 0) {
-			sideEffectObject.colors.push(r);
-			sideEffectObject.colors.push(g);
-			sideEffectObject.colors.push(b);
-			sideEffectObject.colors.push(a);
+		return programs;
+	}
+
+	function generateGlTexture(gl, imageData, withAlphaChannel) {
+		var imageFormat = gl.RGB;
+
+		if (withAlphaChannel)
+			imageFormat = gl.RGBA;
+
+		var glTexture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, glTexture);
+		// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, imageData);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.bindTexture(gl.TEXTURE_2D, null);
+
+		return glTexture;
+	}
+
+	function generateTextures(gl, images, imagesDataArray) {
+		var resultObject = {};
+
+		for (var i = 0; i < imagesDataArray.length; i++) {
+			var imageData = imagesDataArray[i];
+			var cachedTextureLabel = imageData.label;
+
+			var withAlphaChannel = imageData.path.indexOf("with_alpha") > 0;
+
+			var glTexture = generateGlTexture(gl, images[cachedTextureLabel], withAlphaChannel);
+
+			resultObject[cachedTextureLabel] = glTexture;
 		}
+
+		return resultObject;
 	}
 
-	if (textureLabel)
-		sideEffectObject.textureLabel = textureLabel;
 
-	var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
-	for (var j = 0; j < indices.length; j++) {
-		sideEffectObject.indices.push(indices[j]+vertexCount);
+	function unprojectOnZeroLevel(x, y, unprojectVMatrix, pMatrix, viewport) {
+		var near = unproject(x,y,0, unprojectVMatrix, pMatrix, viewport),
+			far = unproject(x,y,1, unprojectVMatrix, pMatrix, viewport);
+
+		var t = -near[2] / (far[2] - near[2]);
+	//		float tempZ = near[2] + (far[2] - near[2]) * t;
+		var mapClickX = near[0] + (far[0] - near[0]) * t;
+		var mapClickY = -(near[1] + (far[1] - near[1]) * t);
+
+		return [mapClickX, mapClickY];
 	}
 
-	if (normals) {
-		for (var j = 0; j < normals.length; j++) {
-			sideEffectObject.vertexNormals.push(normals[j]);
+	function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
+		var x = 2 * (winX - viewport[0])/viewport[2] - 1,
+			y = 2 * (winY - viewport[1])/viewport[3] - 1,
+			z = 2 * winZ - 1;
+
+		var vpMatrix = mat4.create();
+		mat4.multiply(pMatrix, mvMatrix, vpMatrix);
+
+		var invMatrix = mat4.create();
+		mat4.inverse(vpMatrix, invMatrix);
+
+		var n = [x,y,z,1];
+		mat4.multiplyVec4(invMatrix,n,n);
+
+		return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
+	}
+
+
+
+	function translate(point, x, y, z) {
+		return [point[0]+x, point[1]+y, point[2]+z];
+	}
+
+	function degToRad(degrees) {
+		return degrees * Math.PI / 180;
+	}
+
+	function rotate2d(x, y, angle) {
+		return [
+			x*Math.cos(angle)-y*Math.sin(angle),
+			x*Math.sin(angle)+y*Math.cos(angle)
+		];
+	}
+
+	function rotate3d(point, xAngle, yAngle, zAngle) {
+		var result = [point[0],point[1],point[2]];
+
+		if (xAngle !== undefined && xAngle !== 0) {
+			var xRotated = rotate2d(result[1],result[2], degToRad(xAngle));
+			result[1] = xRotated[0];
+			result[2] = xRotated[1];
 		}
+
+		if (yAngle !== undefined && yAngle !== 0) {
+			var yRotated = rotate2d(result[0],result[2], -degToRad(yAngle));
+			result[0] = yRotated[0];
+			result[2] = yRotated[1];
+		}
+
+		if (zAngle !== undefined && zAngle !== 0) {
+			var zRotated = rotate2d(result[0],result[1], degToRad(zAngle));
+			result[0] = zRotated[0];
+			result[1] = zRotated[1];
+		}
+
+		return result;
 	}
 
-	if (lightX || lightX === 0)
-		sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
-}
 
-var prepareAllData = function(data) {
-	var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
-
-	for (var i = 0; i < data.length; i++) {
-		var drawCommand = data[i];
-
-		var vertices = drawCommand[0],
-			indices = drawCommand[1],
-			x = drawCommand[2] || 0,
-			y = drawCommand[3] || 0,
-			z = drawCommand[4] || 0,
-			xa = drawCommand[5],
-			ya = drawCommand[6],
-			za = drawCommand[7],
-			textureCoords = drawCommand[8],
-			textureLabel = drawCommand[9],
-			r = drawCommand[10],
-			g = drawCommand[11],
-			b = drawCommand[12],
-			a = drawCommand[13],
-			normals = drawCommand[14],
-			lightX = drawCommand[15],
-			lightY = drawCommand[16],
-			lightZ = drawCommand[17];
-
-		prepareData(
-			modelData,
-			vertices, indices, textureCoords, textureLabel,
-			x,y,z, xa,ya,za,
-			r,g,b,a,
-			normals, lightX, lightY, lightZ);
-	}
-
-	return modelData;
-}
-
-var render = function(tag, webgl, data) {
-	if (tag === "setCamera") {
-		var x = data[data.length-1].x,
-			y = data[data.length-1].y,
-			z = data[data.length-1].z;
-
-		webgl.vMatrix = mat4.lookAt([x,y,z], [x,y,0], [0,1,0]);
-		webgl.unprojectVMatrix = mat4.lookAt([x,-y,z], [x,-y,0], [0,1,0]);
-
-		var normalMatrix = mat3.create();
-		mat4.toInverseMat3(webgl.vMatrix, normalMatrix);
-		mat3.transpose(normalMatrix);
-		webgl.normalMatrix = normalMatrix;
-	}
-	else if (tag === "setViewport") {
-		var width = data[data.length-1].width,
-			height = data[data.length-1].height;
-
-		webgl.canvas.width = width;
-		webgl.canvas.height = height;
-
-		webgl.pMatrix = mat4.create();
-		mat4.perspective(45, width / height, 0.1, 100.0, webgl.pMatrix);
-
-		webgl.gl.viewport(0, 0, width, height);
-	}
-	else if (tag === "clearScreen") {
+	function renderUsingShaderProgram(tag, webgl, modelData) {
 		var gl = webgl.gl;
-		var color = data[data.length-1];
 
-		gl.clearColor(color.r || 0, color.g || 0, color.b || 0, 1.0);
+		var program,
+			renderingType = gl.TRIANGLES;
 
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-	}
-	else if (tag === "enableAlpha") {
-		var gl = webgl.gl;
-		// gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-		// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-		gl.enable(gl.BLEND);
-	}
-	else if (tag === "disableAlpha") {
-		webgl.gl.disable(webgl.gl.BLEND);
-	}
-	else if (tag === "enableDepth") {
-		webgl.gl.enable(webgl.gl.DEPTH_TEST);
-	}
-	else if (tag === "disableDepth") {
-		webgl.gl.disable(webgl.gl.DEPTH_TEST);
-	}
-	else if (tag === "texturedPolygons"
-			|| tag === "coloredPolygons"
-			|| tag === "coloredLitPolygons" ) {
-		var modelData = prepareAllData(data);
+		if (tag === "texturedPolygons") {
+			program = webgl.programs.texture;
 
-		renderUsingShaderProgram(tag, webgl, modelData);
-	}
-}
-
-var processQueuedCommands = function(internalData) {
-	var oldTag = null,
-		oldIdentifier = null;
-
-
-	var temp = [];
-
-	for (var i = 0; i < internalData.drawQueue.length; i++) {
-		var tag = internalData.drawQueue[i].tag,
-			drawCommand = internalData.drawQueue[i].data;
-
-		var identifier = tag;
-		if (tag === "texturedPolygons")
-			identifier += drawCommand[9]; //textureLabel
-
-		if (oldIdentifier === null) {
-			temp.push(drawCommand);
+			if (modelData.textureLabel === "wireframe") {
+				program = webgl.programs.wireframe;
+				renderingType = gl.LINE_LOOP;
+			}
 		}
-		else if (identifier === oldIdentifier) {
-			temp.push(drawCommand);
-		}
-		else if (identifier !== oldIdentifier) {
-			render(oldTag, internalData.webgl, temp);
-			temp = [];
-			temp.push(drawCommand);
+		else if (tag === "coloredPolygons")
+			program = webgl.programs.colored;
+		else if (tag === "coloredLitPolygons")
+			program = webgl.programs.coloredLit;
+
+
+		var model = generateModel(modelData);
+
+		gl.useProgram(program);
+
+
+		var additionalVertexAttribCount = 0;
+		var bufferArray = []
+
+
+		var vertexAttribute = gl.getAttribLocation(program, "aVertexPosition");
+		gl.enableVertexAttribArray(vertexAttribute);
+		var glVerticesBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
+		gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+		bufferArray.push(glVerticesBuffer);
+
+
+		var vertexNormalAttribute = gl.getAttribLocation(program, "aVertexNormal");
+		if (vertexNormalAttribute !== -1) {
+			gl.enableVertexAttribArray(vertexNormalAttribute);
+			var glVertexNormalsBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
+			additionalVertexAttribCount++;
+			bufferArray.push(glVertexNormalsBuffer);
 		}
 
-		if (i === internalData.drawQueue.length - 1) {
-			render(tag, internalData.webgl, temp);
+		var colorAttribute = gl.getAttribLocation(program, "aColor");
+		if (colorAttribute !== -1) {
+			gl.enableVertexAttribArray(colorAttribute);
+			var glColorBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
+			additionalVertexAttribCount++;
+			bufferArray.push(glColorBuffer);
 		}
 
-		oldTag = tag;
-		oldIdentifier = identifier;
+		var textureCoordsAttribute = gl.getAttribLocation(program, "aTextureCoord");
+		if (textureCoordsAttribute !== -1) {
+			gl.enableVertexAttribArray(textureCoordsAttribute);
+			var glTextureCoordsBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
+			additionalVertexAttribCount++;
+			bufferArray.push(glTextureCoordsBuffer);
+		}
+
+
+		var pMatrixUniform = gl.getUniformLocation(program, "uPMatrix");
+		gl.uniformMatrix4fv(pMatrixUniform, false, webgl.pMatrix);
+
+		var mvMatrixUniform = gl.getUniformLocation(program, "uMVMatrix");
+		gl.uniformMatrix4fv(mvMatrixUniform, false, webgl.vMatrix);
+
+
+		var samplerUniform = gl.getUniformLocation(program, "uSampler");
+		if (samplerUniform !== null) {
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
+			gl.uniform1i(samplerUniform, 1);
+		}
+
+
+		var normalMatrixUniform = gl.getUniformLocation(program, "uNMatrix");
+		if (normalMatrixUniform !== null)
+			gl.uniformMatrix3fv(normalMatrixUniform, false, webgl.normalMatrix);
+
+		var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
+		if (lightPositionUniform !== null) {
+			var lightPos = modelData.lightPos;
+			gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
+		}
+
+
+
+		var glIndicesBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
+		bufferArray.push(glIndicesBuffer)
+
+
+		gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+
+
+		//cleaning up
+		for (var i = 0; i < bufferArray.length; i++) {
+			gl.deleteBuffer(bufferArray[i]);
+		}
+
+		for (var i = additionalVertexAttribCount; i > 0; i--)
+			gl.disableVertexAttribArray(i);
 	}
 
-	internalData.drawQueue = [];
-}
+	function prepareData(
+		sideEffectObject, vertices, indices, textureCoords, textureLabel,
+		x,y,z, xa,ya,za, r,g,b,a,
+		normals, lightX, lightY, lightZ) {
 
-window.onload = function() {
-	try {
-		var internalData = {
-			"imagesDataArray": [],
-			"images": {},
-			"soundsDataArray": [],
-			"sounds": {},
-			"drawQueue": []
-		};
+		for (var j = 0; j < vertices.length/3; j++) {
+			var squareVertex = [
+				vertices[j*3],
+				vertices[j*3+1],
+				vertices[j*3+2]
+			];
 
-		var globalData = {};
+			var tempVertex = rotate3d(squareVertex, xa, ya, za);
 
-		var nativeFunctions = {
+			tempVertex = translate(tempVertex, x,y,z);
+
+			sideEffectObject.vertices.push(tempVertex[0]);
+			sideEffectObject.vertices.push(tempVertex[1]);
+			sideEffectObject.vertices.push(tempVertex[2]);
+
+			if (textureCoords) {
+				sideEffectObject.textureCoords.push(textureCoords[j*2]);
+				sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
+			}
+
+			if (r || r === 0) {
+				sideEffectObject.colors.push(r);
+				sideEffectObject.colors.push(g);
+				sideEffectObject.colors.push(b);
+				sideEffectObject.colors.push(a);
+			}
+		}
+
+		if (textureLabel)
+			sideEffectObject.textureLabel = textureLabel;
+
+		var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
+		for (var j = 0; j < indices.length; j++) {
+			sideEffectObject.indices.push(indices[j]+vertexCount);
+		}
+
+		if (normals) {
+			for (var j = 0; j < normals.length; j++) {
+				sideEffectObject.vertexNormals.push(normals[j]);
+			}
+		}
+
+		if (lightX || lightX === 0)
+			sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
+	}
+
+	function prepareAllData(data) {
+		var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
+
+		for (var i = 0; i < data.length; i++) {
+			var drawCommand = data[i];
+
+			var vertices = drawCommand[0],
+				indices = drawCommand[1],
+				x = drawCommand[2] || 0,
+				y = drawCommand[3] || 0,
+				z = drawCommand[4] || 0,
+				xa = drawCommand[5],
+				ya = drawCommand[6],
+				za = drawCommand[7],
+				textureCoords = drawCommand[8],
+				textureLabel = drawCommand[9],
+				r = drawCommand[10],
+				g = drawCommand[11],
+				b = drawCommand[12],
+				a = drawCommand[13],
+				normals = drawCommand[14],
+				lightX = drawCommand[15],
+				lightY = drawCommand[16],
+				lightZ = drawCommand[17];
+
+			prepareData(
+				modelData,
+				vertices, indices, textureCoords, textureLabel,
+				x,y,z, xa,ya,za,
+				r,g,b,a,
+				normals, lightX, lightY, lightZ);
+		}
+
+		return modelData;
+	}
+
+	function generateViewMatrix(xPos, yPos, zPos, xAngle, yAngle) {
+		var xPos = xPos || 0, yPos = yPos || 0, zPos = zPos || 0,
+			xAngle = xAngle || 0, yAngle = yAngle || 0;
+
+		var resultMatrix = mat4.create();
+		mat4.identity(resultMatrix);
+		mat4.translate(resultMatrix, [xPos, yPos, zPos]);
+		mat4.rotate(resultMatrix, xAngle * Math.PI / 180, [1, 0, 0]);
+		mat4.rotate(resultMatrix, yAngle * Math.PI / 180, [0, 1, 0]);
+		mat4.inverse(resultMatrix);
+
+		return resultMatrix;
+	}
+
+
+	function processGLCommand(tag, webgl, data) {
+		if (tag === "setCamera") {
+			var dataElement = data[data.length-1];
+
+			var x = dataElement.x,
+				y = dataElement.y,
+				z = dataElement.z,
+				xAngle = dataElement.xAngle || 0,
+				yAngle = dataElement.yAngle || 0;
+
+			webgl.vMatrix = generateViewMatrix(x, y, z, xAngle, yAngle);
+			webgl.unprojectVMatrix = generateViewMatrix(x, -y, z, -xAngle, yAngle);
+
+			var normalMatrix = mat3.create();
+			mat4.toInverseMat3(webgl.vMatrix, normalMatrix);
+			mat3.transpose(normalMatrix);
+			webgl.normalMatrix = normalMatrix;
+		}
+		else if (tag === "setViewport") {
+			var width = data[data.length-1].width,
+				height = data[data.length-1].height;
+
+			webgl.canvas.width = width;
+			webgl.canvas.height = height;
+
+			webgl.pMatrix = mat4.create();
+			mat4.perspective(45, width / height, 0.1, 100.0, webgl.pMatrix);
+
+			webgl.gl.viewport(0, 0, width, height);
+		}
+		else if (tag === "clearScreen") {
+			var gl = webgl.gl;
+			var color = data[data.length-1];
+
+			gl.clearColor(color.r || 0, color.g || 0, color.b || 0, 1.0);
+
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		}
+		else if (tag === "enableAlpha") {
+			var gl = webgl.gl;
+			// gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+			gl.enable(gl.BLEND);
+		}
+		else if (tag === "disableAlpha") {
+			webgl.gl.disable(webgl.gl.BLEND);
+		}
+		else if (tag === "enableDepth") {
+			webgl.gl.enable(webgl.gl.DEPTH_TEST);
+		}
+		else if (tag === "disableDepth") {
+			webgl.gl.disable(webgl.gl.DEPTH_TEST);
+		}
+		else if (tag === "texturedPolygons"
+				|| tag === "coloredPolygons"
+				|| tag === "coloredLitPolygons" ) {
+			var modelData = prepareAllData(data);
+
+			renderUsingShaderProgram(tag, webgl, modelData);
+		}
+	}
+
+	function processQueuedCommands(internalData) {
+		var oldTag = null,
+			oldIdentifier = null;
+
+
+		var temp = [];
+
+		for (var i = 0; i < internalData.drawQueue.length; i++) {
+			var tag = internalData.drawQueue[i].tag,
+				drawCommand = internalData.drawQueue[i].data;
+
+			var identifier = tag;
+			if (tag === "texturedPolygons")
+				identifier += drawCommand[9]; //textureLabel
+
+			if (oldIdentifier === null) {
+				temp.push(drawCommand);
+			}
+			else if (identifier === oldIdentifier) {
+				temp.push(drawCommand);
+			}
+			else if (identifier !== oldIdentifier) {
+				processGLCommand(oldTag, internalData.webgl, temp);
+				temp = [];
+				temp.push(drawCommand);
+			}
+
+			if (i === internalData.drawQueue.length - 1) {
+				processGLCommand(tag, internalData.webgl, temp);
+			}
+
+			oldTag = tag;
+			oldIdentifier = identifier;
+		}
+
+		internalData.drawQueue = [];
+	}
+
+
+	function onResizeCallback(setViewportCallback) {
+		var width = window.innerWidth
+			|| document.documentElement.clientWidth
+			|| document.body.clientWidth;
+
+		var height = window.innerHeight
+			|| document.documentElement.clientHeight
+			|| document.body.clientHeight;
+
+		if (width < 120) width = 120;
+		if (height < 80) height = 80;
+
+		setViewportCallback(width, height);
+	}
+
+	function generateNativeFunctions(internalData) {
+		return {
 			"cacheTexture": function(label, path) {
 				internalData.imagesDataArray.push({"label": label, "path": path});
 			},
@@ -660,6 +697,12 @@ window.onload = function() {
 			},
 			"playSound": function() {
 				console.log("playSound()");
+				var audioContext = new AudioContext();
+				var source = audioContext.createBufferSource();
+				source.buffer = internalData.sounds["action"];
+				source.connect(audioContext.destination);
+				source.start(0);
+				// source.onended = function() {alert(1);};
 			},
 			"getScreenDimensions": function() {
 				console.log("getScreenDimensions()");
@@ -668,8 +711,8 @@ window.onload = function() {
 			"setViewport": function(width, height) {
 				internalData.drawQueue.push({"tag":"setViewport", data: {"width": width, "height": height}});
 			},
-			"setCamera": function(x, y, z) {
-				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z}});
+			"setCamera": function(x, y, z, xAngle, yAngle) {
+				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z, "xAngle": xAngle, "yAngle": yAngle}});
 			},
 			"clearScreen": function(r, g, b) {
 				internalData.drawQueue.push({"tag":"clearScreen", data: {"r": r, "g": g, "b":b}});
@@ -689,7 +732,7 @@ window.onload = function() {
 				internalData.drawQueue.push({"tag":"disableDepth"});
 			},
 			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
-				var squareData = generateSquareData();
+				var squareData = generateSquareModelData();
 				internalData.drawQueue.push({"tag":"texturedPolygons", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, squareData.textureCoords, label]});
 			},
 			"renderColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
@@ -699,59 +742,147 @@ window.onload = function() {
 				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
 			}
 		};
+	}
 
-		var cacheImages = function(array) {
-			for (var i = 0; i < array.length; i++) {
-				var imageData = array[i];
+	function makeImagePromise(label, url) {
+		return new Promise(function (resolve, reject) {
+			var image = document.createElement("img");
 
-				internalData.images[imageData.label] = imageData.dom;
+			image.onload = function () {
+				if ('naturalHeight' in this && this.naturalHeight + this.naturalWidth === 0) {
+					reject({"status": "noImage", "statusText": "error loading " + url});
+				}
+				else if (this.width + this.height == 0) {
+					reject({"status": "noImage", "statusText": "error loading " + url});
+				}
+				else {
+					resolve({"label": label, "content": image});
+				}
+			};
+
+			image.src = url;
+		});
+	};
+
+	function makeSoundPromise(label, url) {
+		return new Promise(function (resolve, reject) {
+			var image = document.createElement("img");
+
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', url, true);
+			xhr.responseType = 'arraybuffer';
+
+			// Decode asynchronously
+			xhr.onload = function() {
+				var context = new AudioContext();
+				context.decodeAudioData(
+					xhr.response, 
+					function(buffer) {
+						resolve({"label": label, "content": buffer});
+					},
+					function(error) {
+						reject({"status": "candDecodeAudio", "statusText": "failed to decode: " + url});
+					}
+				);
 			}
+
+			xhr.send();
+		});
+	}
+
+	function cacheResults(destinationObject, dataArray) {
+		for (var i = 0; i < dataArray.length; i++) {
+			var data = dataArray[i];
+			destinationObject[data.label] = data.content;
+		}
+	}
+
+	function promiseAllFileResources(dataArray, folder, callback) {
+		var requestArray = [];
+
+		for (var i = 0; i < dataArray.length; i++) {
+			var imageData = dataArray[i];
+			requestArray.push(callback(imageData.label, folder+imageData.path));
 		}
 
-		var promiseAllImages = function() {
-			globalData.cacheTexturesInit();
+		return Promise.all(requestArray);
+	};
 
-			var requestArray = [];
+	/*
+		Promise extension with methods useful for chaining.
+	 */
+	function activateMonkeyPatch() {
+		Promise.prototype.thenCall = function(object, callbackName) {
+			return this.then(function(value){return object[callbackName](value);});
+		}
 
-			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
-				var imageData = internalData.imagesDataArray[i];
-				requestArray.push(makeImagePromise(imageData.label, "resources/"+imageData.path));
-			}
+		Promise.prototype.thenBind = function(callback, thisObject, arg1, arg2, arg3) {
+			var bindedCallback = callback;
 
-			var imagePromises = 
-				Promise.all(requestArray)
-					.then(cacheImages)
-					.catch(function(data) {alert("Something bad happened!");});
+			if (arg1 === undefined)
+				bindedCallback = callback.bind(thisObject || null);
+			else if (arg2 === undefined)
+				bindedCallback = callback.bind(thisObject || null, arg1);
+			else if (arg3 === undefined)
+				bindedCallback = callback.bind(thisObject || null, arg1, arg2);
+			else
+				bindedCallback = callback.bind(thisObject || null, arg1, arg2, arg3);
 
-			return imagePromises;
+			return this.then(bindedCallback);
+		}
+	}
+
+	/*
+		Remove custom Promise extension methods.
+	 */
+	function deactivateMonkeyPatch() {
+		Promise.prototype.thenCall = undefined;
+		Promise.prototype.thenBind = undefined;
+	};
+
+	/*
+		This method is started when file resources were loaded.
+	 */
+	function jumpStartEngine(internalData, globalData, nativeFunctions) {
+		var canvasElement = document.querySelector("#canvas");
+
+		var gl = getGLcontext(canvasElement);
+
+
+		internalData.webgl = {
+			"canvas": canvasElement,
+			"gl": gl,
+			"programs": generatePrograms(gl),
+			"textures": generateTextures(gl, internalData.images, internalData.imagesDataArray)
 		};
 
 
-		var cacheSounds = function(array) {
-			for (var i = 0; i < array.length; i++) {
-				var soundData = array[i];
+		window.onresize = onResizeCallback.bind(null, nativeFunctions.setViewport);
 
-				internalData.sounds[soundData.label] = soundData.dom;
-			}
-		}
+		window.onresize();
 
-		var promiseAllSounds = function() {
-			globalData.cacheSoundsInit();
+		//to set a correct Viewport dimensions and generate projection matrix
+		processQueuedCommands(internalData);
 
-			var requestArray = [];
 
-			for (var i = 0; i < internalData.soundsDataArray.length; i++) {
-				var soundData = internalData.soundsDataArray[i];
-				requestArray.push(makeSoundRequest(soundData.label, "resources/"+soundData.path));
-			}
-
-			var soundPromises = 
-				Promise.all(requestArray)
-					.then(cacheSounds)
-					.catch(function(data) {alert("Something bad happened!");});
-
-			return soundPromises;
+		canvasElement.onmousedown = function(e) {
+			globalData.addInput(["pressed", 0, e.offsetX, e.offsetY]);
+			internalData["mousePressed"] = true;
+			return false;
 		};
+
+		canvasElement.onmousemove = function(e) {
+			if (internalData.mousePressed) {
+				globalData.addInput(["move", 0, e.offsetX, e.offsetY]);
+			}
+			return false;
+		};
+
+		canvasElement.onmouseup = function(e) {
+			globalData.addInput(["release", 0]);
+			internalData.mousePressed = undefined;
+		};
+
 
 		var gameLoopCycle = function() {
 			globalData.processInput();
@@ -763,95 +894,65 @@ window.onload = function() {
 			window.requestAnimationFrame(gameLoopCycle);
 		}
 
-		var jumpStart = function() {
-			var canvasElement = document.querySelector("#canvas");
+		window.requestAnimationFrame(gameLoopCycle);
+	}
 
-			var gl = getGLcontext(canvasElement);
 
-			var programData = [
-				["texture", textureVertexShaderCode, textureFragmentShaderCode],
-				["wireframe", wireframeVertexShaderCode, wireframeFragmentShaderCode],
-				["colored", coloredVertexShaderCode, coloredFragmentShaderCode],
-				["coloredLit", coloredLitVertexShaderCode, coloredLitFragmentShaderCode]
-			]
+	function startChickpea(resourceFolder) {
+		try {
+			if (resourceFolder === undefined) resourceFolder = "resources/";
 
-			var programs = {};
+			window.AudioContext = window.AudioContext || window.webkitAudioContext;
 
-			for (var i = 0; i < programData.length; i++) {
-				programs[programData[i][0]] = getProgram(gl, programData[i][1], programData[i][2]);
-			}
 
-			internalData.webgl = {
-				"canvas": canvasElement,
-				"gl": gl,
-				"programs": programs,
-				"textures": {}
+			var internalData = {
+				"imagesDataArray": [],
+				"images": {},
+				"soundsDataArray": [],
+				"sounds": {},
+				"drawQueue": []
 			};
 
-
-			var onResize = function() {
-				var width = window.innerWidth
-					|| document.documentElement.clientWidth
-					|| document.body.clientWidth;
-
-				var height = window.innerHeight
-					|| document.documentElement.clientHeight
-					|| document.body.clientHeight;
-
-				if (width < 120) width = 120;
-				if (height < 80) height = 80;
-
-				nativeFunctions.setViewport(width, height);
-			}
-
-			onResize();
-			window.onresize = onResize;
+			var globalData = {};
 
 
-			processQueuedCommands(internalData);
+			var nativeFunctions = generateNativeFunctions(internalData);
 
 
-			for (var i = 0; i < internalData.imagesDataArray.length; i++) {
-				var imageData = internalData.imagesDataArray[i];
-				var cachedTextureLabel = imageData.label;
+			activateMonkeyPatch();
 
-				var withAlphaChannel = imageData.path.indexOf("with_alpha") > 0;
 
-				var glTexture = generateGlTexture(gl, internalData.images[cachedTextureLabel], withAlphaChannel);
+			Promise.resolve()
+				.thenBind(init, null, globalData, nativeFunctions)
 
-				internalData.webgl.textures[cachedTextureLabel] = glTexture;
-			}
+				.thenCall(globalData, "cacheTexturesInit")
+				.thenBind(promiseAllFileResources, null, internalData.imagesDataArray, resourceFolder, makeImagePromise)
+				.thenBind(cacheResults, null, internalData.images)
 
-			canvasElement.onmousedown = function(e) {
-				globalData.addInput(["pressed", 0, e.offsetX, e.offsetY]);
-				internalData["mousePressed"] = true;
-				return false;
-			};
+				.thenCall(globalData, "cacheSoundsInit")
+				.thenBind(promiseAllFileResources, null, internalData.soundsDataArray, resourceFolder, makeSoundPromise)
+				.thenBind(cacheResults, null, internalData.sounds)
 
-			canvasElement.onmousemove = function(e) {
-				if (internalData.mousePressed) {
-					globalData.addInput(["move", 0, e.offsetX, e.offsetY]);
-				}
-				return false;
-			};
+				.thenBind(jumpStartEngine, null, internalData, globalData, nativeFunctions)
 
-			canvasElement.onmouseup = function(e) {
-				globalData.addInput(["release", 0]);
-				internalData.mousePressed = undefined;
-			};
-
-			window.requestAnimationFrame(gameLoopCycle);
+				.then(deactivateMonkeyPatch);
 		}
-
-
-		//this method must be implemented by user
-		init(globalData, nativeFunctions);
-
-		promiseAllImages()
-			.then(promiseAllSounds())
-			.then(jumpStart);
+		catch (e) {
+			alert("Failure: No init function! " + e);
+		}
 	}
-	catch (e) {
-		alert("Failure: No init function! " + e);
-	}
-}
+
+	function start(resourceFolder, startScriptURL) {
+		if (resourceFolder === undefined) resourceFolder = "resources/";
+		if (startScriptURL === undefined) startScriptURL = "js/init.js";
+
+		var scriptTag = document.createElement('script');
+		scriptTag.src = resourceFolder+startScriptURL;
+
+		scriptTag.onload = startChickpea.bind(null, resourceFolder);
+
+		document.body.appendChild(scriptTag);
+	};
+
+	return {"start": start};
+}();

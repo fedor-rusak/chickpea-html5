@@ -1,6 +1,7 @@
 "use strict";
 
 function init(global, natives) {
+
 	global.cacheTexture = function(label, path) {
 		natives.cacheTexture(label, path);
 	}
@@ -25,7 +26,11 @@ function init(global, natives) {
 			console.log("inputData length = " + inputDataArray.length + ", content:");
 			for (var i = 0; i < inputDataArray.length; i++) {
 				console.log(JSON.stringify(inputDataArray[i]));
-				if (inputDataArray[i][0] !== "release" ) {
+				if (inputDataArray[i][0] === "pressed") {
+					console.log(natives.unproject(inputDataArray[i][2], inputDataArray[i][3]));
+				}
+
+				if (inputDataArray[i][0] !== "release") {
 					console.log(natives.unproject(inputDataArray[i][2], inputDataArray[i][3]));
 					if (inputDataArray[i][2] < 500 && !global.soundPlayed) {
 						global.soundPlayed = true;
@@ -113,7 +118,7 @@ function init(global, natives) {
 
 		natives.enableAlphaBlending();
 
-		renderCube(0,0,0, global.angle);
+		renderCube(0,0,0, 0);
 
 	}
 }
