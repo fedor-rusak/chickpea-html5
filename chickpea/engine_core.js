@@ -1,3 +1,76 @@
+/*
+	***Project agenda***
+	Make a simple yet powerful JS API for scripting game engine. To implement it for desktop
+	computers and mobile devices.
+
+	***About***
+	This is an implementation of game engine. A piece of software that helps to work
+	with graphics, sound and user input in order to create interactive applications.
+
+	***Requirements***
+	This implementation relies on WebGL, Web Audio API and javascript typed buffers.
+
+	Matrix transformations for 3D graphics are implemented in third-party library.
+	It must be loaded before engine is initialized.
+
+	***Core ideas***
+	Game loop as a central pattern for engine. Steps are: process input, handle rendering,
+	wait for next iteration.
+
+	Scripting for this engine is done through javascript script file whose path should be
+	provided during start of engine. This file must contain declaration of init function.
+
+	***Scripting details***
+	This function will be called with userFunctions and nativeFunctions objects during
+	engine start. First one for user-defined callbacks that will be called by engine.
+	Second one for functions that engine provides as API to a user.
+
+	Init function must set these callbacks at userFunctions object:
+	 * cacheTexturesInit
+	 * cacheSoundsInit
+	 * addInput (engine will use this to add input event data to user script logic)
+	 * processInput (first step of game loop)
+	 * render (second step of game loop)
+
+	NativeFunctions provides these functions:
+	 * cacheTexture (currently works only on start)
+	 * cacheSound (currently works only on start)
+	 * unproject (translate from 2d coordinates to 3d)
+	 * playSound
+	 * getScreenDimensions (get size of window shown in runtime)
+	 * setViewport (set dimensions for rendered image)
+	 * setCamera (set position for point of view during rendering)
+	 * clearScreen
+	 * enableAlphaBlending (enable WebGL feature for drawing images with transparency)
+	 * disableAlphaBlending (disable WebGL feature for drawing images with transparency)
+	 * enableDepthTesting (enable WebGL feature that makes drawing order dependent on coordinates)
+	 * disableDepthTesting (enable WebGL feature that makes drawing order dependent on draw call order)
+	 * renderTexturedSquare (draw square with specified texture with specified coordinate transformation)
+	 * renderOneColoredPolygons (draw polygons useing vertices, indices, rgba color, xyz coordinates and rotation angles)
+	 * renderOneColoredLitPolygons (like ColoredPolygons but includes normals and light source position WORK IN PROGRESS)
+
+	***Tough design decisions***
+	Context: If every shader needs different number of uniforms/attributes.
+
+	Question: Should I write many specified functions or make a generic mechanism?
+	
+	My decision: Generic function for rendering setup and call. Plus special function for data preparation.
+
+	Pros/Cons: Less code, but it's hard to modify and read without experience.
+
+
+	Context: During user defined render call huge number of draw calls may happen.
+
+	Question: Should I just make them one by one or find some optimization?
+	
+	My decision: I want nice FPS like 30 or 60 and I went for optimization. Which means all the
+	engine calls from render function just fill special queue object. That is later analyzed and
+	multiple calls (when posible) can be compressed in one by unification of vertices, indices,
+	colors and etc.
+
+	Pros/Cons: More code, yet it was necessary to make features like alpha blending to be dynamic.
+ */
+
 "use strict";
 
 var chickpea = function() {
@@ -273,78 +346,6 @@ var chickpea = function() {
 		return resultObject;
 	}
 
-
-	function unprojectOnZeroLevel(x, y, unprojectVMatrix, pMatrix, viewport) {
-		var near = unproject(x,y,0, unprojectVMatrix, pMatrix, viewport),
-			far = unproject(x,y,1, unprojectVMatrix, pMatrix, viewport);
-
-		var t = -near[2] / (far[2] - near[2]);
-	//		float tempZ = near[2] + (far[2] - near[2]) * t;
-		var mapClickX = near[0] + (far[0] - near[0]) * t;
-		var mapClickY = -(near[1] + (far[1] - near[1]) * t);
-
-		return [mapClickX, mapClickY];
-	}
-
-	function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
-		var x = 2 * (winX - viewport[0])/viewport[2] - 1,
-			y = 2 * (winY - viewport[1])/viewport[3] - 1,
-			z = 2 * winZ - 1;
-
-		var vpMatrix = mat4.create();
-		mat4.multiply(pMatrix, mvMatrix, vpMatrix);
-
-		var invMatrix = mat4.create();
-		mat4.inverse(vpMatrix, invMatrix);
-
-		var n = [x,y,z,1];
-		mat4.multiplyVec4(invMatrix,n,n);
-
-		return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
-	}
-
-
-
-	function translate(point, x, y, z) {
-		return [point[0]+x, point[1]+y, point[2]+z];
-	}
-
-	function degToRad(degrees) {
-		return degrees * Math.PI / 180;
-	}
-
-	function rotate2d(x, y, angle) {
-		return [
-			x*Math.cos(angle)-y*Math.sin(angle),
-			x*Math.sin(angle)+y*Math.cos(angle)
-		];
-	}
-
-	function rotate3d(point, xAngle, yAngle, zAngle) {
-		var result = [point[0],point[1],point[2]];
-
-		if (xAngle !== undefined && xAngle !== 0) {
-			var xRotated = rotate2d(result[1],result[2], degToRad(xAngle));
-			result[1] = xRotated[0];
-			result[2] = xRotated[1];
-		}
-
-		if (yAngle !== undefined && yAngle !== 0) {
-			var yRotated = rotate2d(result[0],result[2], -degToRad(yAngle));
-			result[0] = yRotated[0];
-			result[2] = yRotated[1];
-		}
-
-		if (zAngle !== undefined && zAngle !== 0) {
-			var zRotated = rotate2d(result[0],result[1], degToRad(zAngle));
-			result[0] = zRotated[0];
-			result[1] = zRotated[1];
-		}
-
-		return result;
-	}
-
-
 	function renderUsingShaderProgram(tag, webgl, modelData) {
 		var gl = webgl.gl;
 
@@ -462,6 +463,46 @@ var chickpea = function() {
 			gl.disableVertexAttribArray(i);
 	}
 
+
+	function translate(point, x, y, z) {
+		return [point[0]+x, point[1]+y, point[2]+z];
+	}
+
+	function degToRad(degrees) {
+		return degrees * Math.PI / 180;
+	}
+
+	function rotate2d(x, y, angle) {
+		return [
+			x*Math.cos(angle)-y*Math.sin(angle),
+			x*Math.sin(angle)+y*Math.cos(angle)
+		];
+	}
+
+	function rotate3d(point, xAngle, yAngle, zAngle) {
+		var result = [point[0],point[1],point[2]];
+
+		if (xAngle !== undefined && xAngle !== 0) {
+			var xRotated = rotate2d(result[1],result[2], degToRad(xAngle));
+			result[1] = xRotated[0];
+			result[2] = xRotated[1];
+		}
+
+		if (yAngle !== undefined && yAngle !== 0) {
+			var yRotated = rotate2d(result[0],result[2], -degToRad(yAngle));
+			result[0] = yRotated[0];
+			result[2] = yRotated[1];
+		}
+
+		if (zAngle !== undefined && zAngle !== 0) {
+			var zRotated = rotate2d(result[0],result[1], degToRad(zAngle));
+			result[0] = zRotated[0];
+			result[1] = zRotated[1];
+		}
+
+		return result;
+	}
+
 	function prepareData(
 		sideEffectObject, vertices, indices, textureCoords, textureLabel,
 		x,y,z, xa,ya,za, r,g,b,a,
@@ -549,6 +590,7 @@ var chickpea = function() {
 		return modelData;
 	}
 
+
 	function generateViewMatrix(xPos, yPos, zPos, xAngle, yAngle) {
 		var xPos = xPos || 0, yPos = yPos || 0, zPos = zPos || 0,
 			xAngle = xAngle || 0, yAngle = yAngle || 0;
@@ -561,6 +603,36 @@ var chickpea = function() {
 		mat4.inverse(resultMatrix);
 
 		return resultMatrix;
+	}
+
+
+	function unprojectOnZeroLevel(x, y, unprojectVMatrix, pMatrix, viewport) {
+		var near = unproject(x,y,0, unprojectVMatrix, pMatrix, viewport),
+			far = unproject(x,y,1, unprojectVMatrix, pMatrix, viewport);
+
+		var t = -near[2] / (far[2] - near[2]);
+	//		float tempZ = near[2] + (far[2] - near[2]) * t;
+		var mapClickX = near[0] + (far[0] - near[0]) * t;
+		var mapClickY = -(near[1] + (far[1] - near[1]) * t);
+
+		return [mapClickX, mapClickY];
+	}
+
+	function unproject(winX,winY,winZ, mvMatrix, pMatrix, viewport){
+		var x = 2 * (winX - viewport[0])/viewport[2] - 1,
+			y = 2 * (winY - viewport[1])/viewport[3] - 1,
+			z = 2 * winZ - 1;
+
+		var vpMatrix = mat4.create();
+		mat4.multiply(pMatrix, mvMatrix, vpMatrix);
+
+		var invMatrix = mat4.create();
+		mat4.inverse(vpMatrix, invMatrix);
+
+		var n = [x,y,z,1];
+		mat4.multiplyVec4(invMatrix,n,n);
+
+		return [n[0]/n[3],n[1]/n[3],n[2]/n[3]];
 	}
 
 
@@ -666,21 +738,6 @@ var chickpea = function() {
 	}
 
 
-	function onResizeCallback(setViewportCallback) {
-		var width = window.innerWidth
-			|| document.documentElement.clientWidth
-			|| document.body.clientWidth;
-
-		var height = window.innerHeight
-			|| document.documentElement.clientHeight
-			|| document.body.clientHeight;
-
-		if (width < 120) width = 120;
-		if (height < 80) height = 80;
-
-		setViewportCallback(width, height);
-	}
-
 	function generateNativeFunctions(internalData) {
 		return {
 			"cacheTexture": function(label, path) {
@@ -735,14 +792,15 @@ var chickpea = function() {
 				var squareData = generateSquareModelData();
 				internalData.drawQueue.push({"tag":"texturedPolygons", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, squareData.textureCoords, label]});
 			},
-			"renderColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
+			"renderOneColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a]});
 			},
-			"renderColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
+			"renderOneColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
 			}
 		};
 	}
+
 
 	function makeImagePromise(label, url) {
 		return new Promise(function (resolve, reject) {
@@ -808,6 +866,23 @@ var chickpea = function() {
 		return Promise.all(requestArray);
 	};
 
+
+	function onResizeCallback(setViewportCallback) {
+		var width = window.innerWidth
+			|| document.documentElement.clientWidth
+			|| document.body.clientWidth;
+
+		var height = window.innerHeight
+			|| document.documentElement.clientHeight
+			|| document.body.clientHeight;
+
+		if (width < 120) width = 120;
+		if (height < 80) height = 80;
+
+		setViewportCallback(width, height);
+	}
+
+
 	/*
 		Promise extension with methods useful for chaining.
 	 */
@@ -840,10 +915,11 @@ var chickpea = function() {
 		Promise.prototype.thenBind = undefined;
 	};
 
+
 	/*
 		This method is started when file resources were loaded.
 	 */
-	function jumpStartEngine(internalData, globalData, nativeFunctions) {
+	function jumpStartEngine(internalData, userScriptFunctions, nativeFunctions) {
 		var canvasElement = document.querySelector("#canvas");
 
 		var gl = getGLcontext(canvasElement);
@@ -866,28 +942,28 @@ var chickpea = function() {
 
 
 		canvasElement.onmousedown = function(e) {
-			globalData.addInput(["pressed", 0, e.offsetX, e.offsetY]);
+			userScriptFunctions.addInput(["pressed", 0, e.offsetX, e.offsetY]);
 			internalData["mousePressed"] = true;
 			return false;
 		};
 
 		canvasElement.onmousemove = function(e) {
 			if (internalData.mousePressed) {
-				globalData.addInput(["move", 0, e.offsetX, e.offsetY]);
+				userScriptFunctions.addInput(["move", 0, e.offsetX, e.offsetY]);
 			}
 			return false;
 		};
 
 		canvasElement.onmouseup = function(e) {
-			globalData.addInput(["release", 0]);
+			userScriptFunctions.addInput(["release", 0]);
 			internalData.mousePressed = undefined;
 		};
 
 
 		var gameLoopCycle = function() {
-			globalData.processInput();
+			userScriptFunctions.processInput();
 
-			globalData.render();
+			userScriptFunctions.render();
 
 			processQueuedCommands(internalData);
 
@@ -896,7 +972,6 @@ var chickpea = function() {
 
 		window.requestAnimationFrame(gameLoopCycle);
 	}
-
 
 	function startChickpea(resourceFolder) {
 		try {
@@ -913,7 +988,7 @@ var chickpea = function() {
 				"drawQueue": []
 			};
 
-			var globalData = {};
+			var userScriptFunctions = {};
 
 
 			var nativeFunctions = generateNativeFunctions(internalData);
@@ -923,17 +998,17 @@ var chickpea = function() {
 
 
 			Promise.resolve()
-				.thenBind(init, null, globalData, nativeFunctions)
+				.thenBind(init, null, userScriptFunctions, nativeFunctions)
 
-				.thenCall(globalData, "cacheTexturesInit")
+				.thenCall(userScriptFunctions, "cacheTexturesInit")
 				.thenBind(promiseAllFileResources, null, internalData.imagesDataArray, resourceFolder, makeImagePromise)
 				.thenBind(cacheResults, null, internalData.images)
 
-				.thenCall(globalData, "cacheSoundsInit")
+				.thenCall(userScriptFunctions, "cacheSoundsInit")
 				.thenBind(promiseAllFileResources, null, internalData.soundsDataArray, resourceFolder, makeSoundPromise)
 				.thenBind(cacheResults, null, internalData.sounds)
 
-				.thenBind(jumpStartEngine, null, internalData, globalData, nativeFunctions)
+				.thenBind(jumpStartEngine, null, internalData, userScriptFunctions, nativeFunctions)
 
 				.then(deactivateMonkeyPatch);
 		}
@@ -953,6 +1028,7 @@ var chickpea = function() {
 
 		document.body.appendChild(scriptTag);
 	};
+
 
 	return {"start": start};
 }();

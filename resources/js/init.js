@@ -1,27 +1,27 @@
 "use strict";
 
-function init(global, natives) {
+function init(userScriptFunctions, natives) {
 
-	global.cacheTexture = function(label, path) {
-		natives.cacheTexture(label, path);
+	userScriptFunctions.cacheTexturesInit = function() {
+		natives.cacheTexture('explosion', 'images/with_alpha/explosion.png');
 	}
 
-	global.cacheTexturesInit = function() {
-		global.cacheTexture('explosion', 'images/with_alpha/explosion.png');
+	userScriptFunctions.cacheSoundsInit = function() {
+		natives.cacheSound('background',	'sound/background.mp3');
+		natives.cacheSound('action',		'sound/sfx.wav');
 	}
 
-	global.cacheSoundsInit = function() {
-		natives.cacheSound('background', 'sound/background.mp3');
-		natives.cacheSound('action', 'sound/sfx.wav');
+	var state = {
+		inputDataArray: []
+	};
+
+	userScriptFunctions.addInput = function(data) {
+		state.inputDataArray.push(data);
 	}
 
-	var inputDataArray = [];
+	userScriptFunctions.processInput = function() {
+		var inputDataArray = state.inputDataArray;
 
-	global.addInput = function(data) {
-		inputDataArray.push(data);
-	}
-
-	global.processInput = function() {
 		if (inputDataArray.length != 0) {
 			console.log("inputData length = " + inputDataArray.length + ", content:");
 			for (var i = 0; i < inputDataArray.length; i++) {
@@ -32,8 +32,8 @@ function init(global, natives) {
 
 				if (inputDataArray[i][0] !== "release") {
 					console.log(natives.unproject(inputDataArray[i][2], inputDataArray[i][3]));
-					if (inputDataArray[i][2] < 500 && !global.soundPlayed) {
-						global.soundPlayed = true;
+					if (inputDataArray[i][2] < 500 && !state.soundPlayed) {
+						state.soundPlayed = true;
 						natives.playSound();
 					}
 				}
@@ -44,11 +44,8 @@ function init(global, natives) {
 		}
 	}
 
-	var counter = 0;
 
-	var renderSide = function(x,y,z, xa,ya,za) {
-		counter++;
-		var textureLabel = counter % 2 === 0 ? "explosion" : "wireframe";
+	var renderSide = function(textureLabel, x,y,z, xa,ya,za) {
 		natives.renderTexturedSquare(textureLabel, x,y,z, xa,ya,za);
 	}
 
@@ -65,33 +62,33 @@ function init(global, natives) {
 	}
 
 	var renderCube = function(x,y,z, zAngles) {
-		renderSide( x-cos(zAngles), y, z+sin(zAngles),	0, 90+zAngles);
-		renderSide( x+cos(zAngles), y, z-sin(zAngles),	0, 90+zAngles);
-		renderSide( x, y+1, z,							90,zAngles);
-		renderSide( x,y-1, z,							90,zAngles);
-		renderSide( x-sin(zAngles), y,z-cos(zAngles),	0,zAngles);
-		renderSide( x+sin(zAngles), y,z+cos(zAngles),	0,zAngles);
+		renderSide("wireframe", x-cos(zAngles), y,		z+sin(zAngles),	0,	90+zAngles);
+		renderSide("explosion", x+cos(zAngles), y,		z-sin(zAngles),	0,	90+zAngles);
+		renderSide("wireframe", x,				y+1, 	z,				90,	zAngles);
+		renderSide("explosion", x,				y-1, 	z,				90,	zAngles);
+		renderSide("wireframe", x-sin(zAngles), y,		z-cos(zAngles),	0,	zAngles);
+		renderSide("explosion", x+sin(zAngles), y,		z+cos(zAngles),	0,	zAngles);
 	}
 
-	global.render = function() {
-		if (!global.cameraSet) {
+	userScriptFunctions.render = function() {
+		if (!state.cameraSet) {
 			var data = natives.getScreenDimensions();
 			console.log(JSON.stringify(data));
 			natives.setCamera(0.0, 0.0, 5.0);
-			global.cameraSet = true;
-			global.radius = 0;
-			global.angle = 0;
-			global.step = 0.005;
-			global.sign = +1;
+			state.cameraSet = true;
+			state.radius = 0;
+			state.angle = 0;
+			state.step = 0.005;
+			state.sign = +1;
 		}
-		var radians = global.angle*Math.PI/180;
-		natives.setCamera(Math.sin(radians)*global.radius, Math.cos(radians)*global.radius, 5.0);
+		var radians = state.angle*Math.PI/180;
+		natives.setCamera(Math.sin(radians)*state.radius, Math.cos(radians)*state.radius, 5.0);
 
-		global.radius += global.sign*global.step;
-		global.angle += 1;
-		if (global.angle == 400) {
-			global.sign *=-1;
-			global.angle = 40;
+		state.radius += state.sign*state.step;
+		state.angle += 1;
+		if (state.angle == 400) {
+			state.sign *=-1;
+			state.angle = 40;
 		}
 
 		Math.sin(90*Math.PI/180)
@@ -103,12 +100,12 @@ function init(global, natives) {
 		natives.enableDepthTesting();
 		natives.disableAlphaBlending();
 
-		natives.renderColoredPolygons(
+		natives.renderOneColoredPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 			[0,1,2, 3,0,2],
-			0.1, 0.7, 0.2, 0.5, 0,0,0, 0, global.angle);
+			0.1, 0.7, 0.2, 0.5, 0,0,0, 0, state.angle);
 
-		natives.renderColoredLitPolygons(
+		natives.renderOneColoredLitPolygons(
 			[-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 			[0,1,2, 3,0,2],
 			// [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1,-1,-1,1,1,1,1], //circly normals
@@ -119,7 +116,6 @@ function init(global, natives) {
 		natives.enableAlphaBlending();
 
 		renderCube(0,0,0, 0);
-
 	}
 }
 
