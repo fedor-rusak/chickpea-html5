@@ -21,11 +21,11 @@
 	provided during start of engine. This file must contain declaration of init function.
 
 	***Scripting details***
-	This function will be called with userFunctions and nativeFunctions objects during
+	This function will be called with userScriptFunctions and nativeFunctions objects during
 	engine start. First one for user-defined callbacks that will be called by engine.
 	Second one for functions that engine provides as API to a user.
 
-	Init function must set these callbacks at userFunctions object:
+	Init function must set these callbacks at userScriptFunctions object:
 	 * cacheTexturesInit
 	 * cacheSoundsInit
 	 * addInput (engine will use this to add input event data to user script logic)
@@ -48,6 +48,7 @@
 	 * renderTexturedSquare (draw square with specified texture with specified coordinate transformation)
 	 * renderOneColoredPolygons (draw polygons useing vertices, indices, rgba color, xyz coordinates and rotation angles)
 	 * renderOneColoredLitPolygons (like ColoredPolygons but includes normals and light source position WORK IN PROGRESS)
+	 * rotate3d (helper for manipulating vector)
 
 	***Tough design decisions***
 	Context: If every shader needs different number of uniforms/attributes.
@@ -75,7 +76,7 @@
 
 var chickpea = function() {
 
-	function generateModel(data) {
+	function getRenderingData(data) {
 		var result = {};
 
 		if (data.vertices) {
@@ -366,7 +367,7 @@ var chickpea = function() {
 			program = webgl.programs.coloredLit;
 
 
-		var model = generateModel(modelData);
+		var renderingData = getRenderingData(modelData);
 
 		gl.useProgram(program);
 
@@ -379,8 +380,8 @@ var chickpea = function() {
 		gl.enableVertexAttribArray(vertexAttribute);
 		var glVerticesBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, glVerticesBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, model.verticesBuffer, gl.STREAM_DRAW);
-		gl.vertexAttribPointer(vertexAttribute, model.verticesItemSize, gl.FLOAT, false, 0, 0);
+		gl.bufferData(gl.ARRAY_BUFFER, renderingData.verticesBuffer, gl.STREAM_DRAW);
+		gl.vertexAttribPointer(vertexAttribute, renderingData.verticesItemSize, gl.FLOAT, false, 0, 0);
 		bufferArray.push(glVerticesBuffer);
 
 
@@ -389,8 +390,8 @@ var chickpea = function() {
 			gl.enableVertexAttribArray(vertexNormalAttribute);
 			var glVertexNormalsBuffer = gl.createBuffer();
 			gl.bindBuffer(gl.ARRAY_BUFFER, glVertexNormalsBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, model.vertexNormalsBuffer, gl.STREAM_DRAW);
-			gl.vertexAttribPointer(vertexNormalAttribute, model.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
+			gl.bufferData(gl.ARRAY_BUFFER, renderingData.vertexNormalsBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(vertexNormalAttribute, renderingData.vertexNormalItemSize, gl.FLOAT, false, 0, 0);
 			additionalVertexAttribCount++;
 			bufferArray.push(glVertexNormalsBuffer);
 		}
@@ -400,8 +401,8 @@ var chickpea = function() {
 			gl.enableVertexAttribArray(colorAttribute);
 			var glColorBuffer = gl.createBuffer();
 			gl.bindBuffer(gl.ARRAY_BUFFER, glColorBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, model.colorBuffer, gl.STREAM_DRAW);
-			gl.vertexAttribPointer(colorAttribute, model.colorItemSize, gl.FLOAT, false, 0, 0);
+			gl.bufferData(gl.ARRAY_BUFFER, renderingData.colorBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(colorAttribute, renderingData.colorItemSize, gl.FLOAT, false, 0, 0);
 			additionalVertexAttribCount++;
 			bufferArray.push(glColorBuffer);
 		}
@@ -411,8 +412,8 @@ var chickpea = function() {
 			gl.enableVertexAttribArray(textureCoordsAttribute);
 			var glTextureCoordsBuffer = gl.createBuffer();
 			gl.bindBuffer(gl.ARRAY_BUFFER, glTextureCoordsBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, model.textureCoordsBuffer, gl.STREAM_DRAW);
-			gl.vertexAttribPointer(textureCoordsAttribute, model.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
+			gl.bufferData(gl.ARRAY_BUFFER, renderingData.textureCoordsBuffer, gl.STREAM_DRAW);
+			gl.vertexAttribPointer(textureCoordsAttribute, renderingData.textureCoordsItemSize, gl.FLOAT, false, 0, 0);
 			additionalVertexAttribCount++;
 			bufferArray.push(glTextureCoordsBuffer);
 		}
@@ -428,7 +429,7 @@ var chickpea = function() {
 		var samplerUniform = gl.getUniformLocation(program, "uSampler");
 		if (samplerUniform !== null) {
 			gl.activeTexture(gl.TEXTURE1);
-			gl.bindTexture(gl.TEXTURE_2D, webgl.textures[model.textureLabel]);
+			gl.bindTexture(gl.TEXTURE_2D, webgl.textures[renderingData.textureLabel]);
 			gl.uniform1i(samplerUniform, 1);
 		}
 
@@ -439,19 +440,18 @@ var chickpea = function() {
 
 		var lightPositionUniform = gl.getUniformLocation(program, "uLightPosition");
 		if (lightPositionUniform !== null) {
-			var lightPos = modelData.lightPos;
+			var lightPos = renderingData.lightPos;
 			gl.uniform3f(lightPositionUniform, lightPos.x,lightPos.y,lightPos.z);
 		}
 
 
-
 		var glIndicesBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndicesBuffer);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indicesBuffer, gl.STREAM_DRAW);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, renderingData.indicesBuffer, gl.STREAM_DRAW);
 		bufferArray.push(glIndicesBuffer)
 
 
-		gl.drawElements(renderingType, model.indicesItems, gl.UNSIGNED_SHORT, 0);
+		gl.drawElements(renderingType, renderingData.indicesItems, gl.UNSIGNED_SHORT, 0);
 
 
 		//cleaning up
@@ -472,35 +472,69 @@ var chickpea = function() {
 		return degrees * Math.PI / 180;
 	}
 
-	function rotate2d(x, y, angle) {
-		return [
-			x*Math.cos(angle)-y*Math.sin(angle),
-			x*Math.sin(angle)+y*Math.cos(angle)
-		];
+	function getRotationMatrix(xAngle, yAngle, zAngle) {
+		var tempQuat = quat4.create([0,0,0, 1]);
+		quat4.multiply(tempQuat, quat4.create([Math.sin(degToRad(xAngle)/2),0,0, Math.cos(degToRad(xAngle)/2)]), tempQuat);
+		quat4.multiply(tempQuat, quat4.create([0,Math.sin(degToRad(yAngle)/2),0, Math.cos(degToRad(yAngle)/2)]), tempQuat);
+		quat4.multiply(tempQuat, quat4.create([0,0,Math.sin(degToRad(zAngle)/2), Math.cos(degToRad(zAngle)/2)]), tempQuat);
+		quat4.normalize(tempQuat);
+		return quat4.toMat4(tempQuat);
 	}
 
-	function rotate3d(point, xAngle, yAngle, zAngle) {
-		var result = [point[0],point[1],point[2]];
+	function rotate3d(x,y,z, xAngle, yAngle, zAngle) {
+		var tempMat = mat4.create();
 
-		if (xAngle !== undefined && xAngle !== 0) {
-			var xRotated = rotate2d(result[1],result[2], degToRad(xAngle));
-			result[1] = xRotated[0];
-			result[2] = xRotated[1];
+		mat4.identity(tempMat);
+
+		mat4.multiply(tempMat, getRotationMatrix(xAngle, -yAngle, zAngle), tempMat);
+
+		mat4.translate(tempMat, [x,y,z]);
+
+		mat4.inverse(tempMat);
+
+		var rx = 0, ry = 0, rz = 0;
+
+		for (var i = 0; i < 3; i++) {
+			rx += tempMat[4*i] * tempMat[12+i];
+			ry += tempMat[1+4*i] * tempMat[12+i];
+			rz += tempMat[2+4*i] * tempMat[12+i];
 		}
 
-		if (yAngle !== undefined && yAngle !== 0) {
-			var yRotated = rotate2d(result[0],result[2], -degToRad(yAngle));
-			result[0] = yRotated[0];
-			result[2] = yRotated[1];
-		}
+		return [-rx, -ry, -rz];
+	}
 
-		if (zAngle !== undefined && zAngle !== 0) {
-			var zRotated = rotate2d(result[0],result[1], degToRad(zAngle));
-			result[0] = zRotated[0];
-			result[1] = zRotated[1];
-		}
+	function radToDeg(rads) {
+		return rads * 180 / Math.PI;
+	}
 
-		return result;
+
+	function rotate3dtwice(x,y,z, xa1, ya1, za1, xa2, ya2, za2) {
+		var angleMat = mat4.create();
+
+		mat4.identity(angleMat);
+
+		mat4.multiply(angleMat, getRotationMatrix(xa2, -ya2, za2), angleMat);
+		// mat4.rotate(angleMat, degToRad(ya2), [0,1,0]);
+		// mat4.rotate(angleMat, degToRad(za2/2), [0,0,1]);
+
+		// mat4.rotate(angleMat, degToRad(ya1), [0,1,0]);
+		// mat4.rotate(angleMat, degToRad(za1/2), [0,0,1]);
+
+		mat4.multiply(angleMat, getRotationMatrix(xa1, ya1, za1), angleMat);
+
+		mat4.translate(angleMat, [x,y,z]);
+
+		mat4.inverse(angleMat);
+
+		var angleX = Math.atan2(angleMat[9], angleMat[10]);
+		var angleY = Math.atan2(-angleMat[8], Math.sqrt(angleMat[9]*angleMat[9] + angleMat[10]*angleMat[10]));
+		var angleZ = Math.atan2(angleMat[4], angleMat[0]);
+
+
+		var tempPoint = rotate3d(x,y,z, xa2,ya2,za2)
+
+
+		return [tempPoint[0], tempPoint[1], tempPoint[2], radToDeg(angleX), radToDeg(angleY), radToDeg(angleZ)];
 	}
 
 	function prepareData(
@@ -509,13 +543,7 @@ var chickpea = function() {
 		normals, lightX, lightY, lightZ) {
 
 		for (var j = 0; j < vertices.length/3; j++) {
-			var squareVertex = [
-				vertices[j*3],
-				vertices[j*3+1],
-				vertices[j*3+2]
-			];
-
-			var tempVertex = rotate3d(squareVertex, xa, ya, za);
+			var tempVertex = rotate3d(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za);
 
 			tempVertex = translate(tempVertex, x,y,z);
 
@@ -598,8 +626,8 @@ var chickpea = function() {
 		var resultMatrix = mat4.create();
 		mat4.identity(resultMatrix);
 		mat4.translate(resultMatrix, [xPos, yPos, zPos]);
-		mat4.rotate(resultMatrix, xAngle * Math.PI / 180, [1, 0, 0]);
-		mat4.rotate(resultMatrix, yAngle * Math.PI / 180, [0, 1, 0]);
+		mat4.rotate(resultMatrix, degToRad(xAngle), [1, 0, 0]);
+		mat4.rotate(resultMatrix, degToRad(yAngle), [0, 1, 0]);
 		mat4.inverse(resultMatrix);
 
 		return resultMatrix;
@@ -797,6 +825,12 @@ var chickpea = function() {
 			},
 			"renderOneColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
+			},
+			"rotate3d": function(x, y, z, angleX, angleY, angleZ) {
+				return rotate3d(x, y, z, angleX, angleY, angleZ);
+			},
+			"rotate3dtwice": function(x, y, z, angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2) {
+				return rotate3dtwice(x, y, z, angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2);
 			}
 		};
 	}
