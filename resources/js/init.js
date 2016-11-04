@@ -109,38 +109,66 @@ function init(userScriptFunctions, natives) {
 		for (var i = 0; i < itemNameArray.length; i++) {
 			var itemName = itemNameArray[i];
 
-			result[itemName] = current[itemName];
+			result[itemName] = propagated[itemName] || 0;
 		}
 
-		console.log([result.x,
-			result.y,
-			result.z,
+
+		var tempAngles = natives.rotate3dAngles(
 			current.angleX, current.angleY, current.angleZ,
-			propagated.angleX || 0, propagated.angleY || 0, propagated.angleZ || 0])
+			propagated.angleX, propagated.angleY, propagated.angleZ);
 
-		var tempData = natives.rotate3dtwice(
-			result.x,
-			result.y,
-			result.z,
-			current.angleX, current.angleY, current.angleZ,
-			propagated.angleX || 0, propagated.angleY || 0, propagated.angleZ || 0);
-
-		result.x = tempData[0];
-		result.y = tempData[1];
-		result.z = tempData[2];
-
-		result.angleX = tempData[3];
-		result.angleY = tempData[4];
-		result.angleZ = tempData[5];
+		result.angleX = tempAngles[0];
+		result.angleY = tempAngles[1];
+		result.angleZ = tempAngles[2];
 
 
-		result.x += propagated.x || 0;
-		result.y += propagated.y || 0;
-		result.z += propagated.z || 0;
+		var tempPoint = natives.rotate3d(
+			current.x, current.y, current.z,
+			propagated.angleX, propagated.angleY, propagated.angleZ);
 
-		console.log(result);
+		result.x += tempPoint[0];
+		result.y += tempPoint[1]; 
+		result.z += tempPoint[2];
+
+
 		return result;
 	}
+
+
+	var combineTransformationsNew = function(current, propagated, destination) {
+		var result = destination || {};
+
+		var itemNameArray = ["x", "y", "z", "xa", "ya", "za", "a"];
+
+		for (var i = 0; i < itemNameArray.length; i++) {
+			var itemName = itemNameArray[i];
+
+			result[itemName] = propagated[itemName] || 0;
+		}
+
+
+		var tempData = natives.rotateAxisAngles(
+			current.xa, current.ya, current.za, current.a,
+			propagated.xa, propagated.ya, propagated.za, propagated.a);
+
+		result.xa = tempData[0];
+		result.ya = tempData[1];
+		result.za = tempData[2];
+		result.a = tempData[3];
+
+
+		var tempPoint = natives.rotate3dNew(
+			current.x, current.y, current.z,
+			propagated.xa, propagated.ya, propagated.za, propagated.a);
+
+		result.x += tempPoint[0];
+		result.y += tempPoint[1]; 
+		result.z += tempPoint[2];
+
+
+		return result;
+	}
+
 
 	var renderHelper = function(serializedCommands, propagatedTransformations) {
 		if (propagatedTransformations === undefined) 
@@ -220,9 +248,10 @@ function init(userScriptFunctions, natives) {
 		};
 	};
 
-
-	state.angle = 0;
-	state.step = 0.005;
+	state.delta = 270;
+	state.testAngle = 270;
+	state.angle = 0;//state.testAngle-1;
+	state.step = 0.5;
 	state.sign = +1;
 	state.radius = 0;
 
@@ -235,11 +264,11 @@ function init(userScriptFunctions, natives) {
 		state.radius += state.sign*state.step;
 
 
-		state.angle += 1 * state.sign;
-		if (state.angle > 179) {
+		state.angle += state.step * state.sign;
+		if (state.angle > state.testAngle+state.delta) {
 			state.sign *=-1;
 		}
-		else if (state.angle < 1) {
+		else if (state.angle < state.testAngle-state.delta) {
 			state.sign *=-1;
 		}
 
@@ -265,42 +294,70 @@ function init(userScriptFunctions, natives) {
 
 		// var result = natives.rotate3d(1,0,0, 90,90,0, 0,0,0);
 		// alert(result)
+		var baseBaseTransformations = {"x": -3, "y": 0, "z": 0, "angleX": 0, "angleY": 0, "angleZ": 0};
+		var baseTransformations = {"x": 0, "y": 0, "z": 0, "angleX": 0, "angleY": state.angle, "angleZ": state.angle};
+		baseTransformations = combineTransformations(baseTransformations, baseBaseTransformations)
 
-		var baseTransformations = {"x": 0, "y": 0, "z": 0, "angleX": 0, "angleY": state.angle, "angleZ": 0};
 
 		natives.clearScreen(0.1, 0.2, 0.3)
 		natives.setCamera(0,0,7);
 
 		var input = [
-			{"x": 1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
-			{"x": -1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
-			{"x": 0, "y": 1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
-			{"x": 0, "y": -1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
-			{"x": 0, "y": 0, "z": -1, "angleX": 0, "angleY": 0, "angleZ": 0},
-			{"x": 0, "y": 0, "z": 1, "angleX": 0, "angleY": 0, "angleZ": 0}
+			"explosion", {"x": 1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
+			"wireframe", {"x": -1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
+			"explosion", {"x": 0, "y": 1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
+			"wireframe", {"x": 0, "y": -1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
+			"explosion", {"x": 0, "y": 0, "z": -1, "angleX": 0, "angleY": 0, "angleZ": 0},
+			"wireframe", {"x": 0, "y": 0, "z": 1, "angleX": 0, "angleY": 0, "angleZ": 0}
 		];
 
-		// alert(JSON.stringify(natives.rotate3dtwice(0,0,0, 0,55,0, 0,45,0)))
+		// alert(JSON.stringify(natives.rotate3dAngles(0,55,0, 0,45,0)))
 		// alert(JSON.stringify(natives.rotate3d(1,0,0, 0,90,0)))
 
 
 		natives.enableAlphaBlending()
 
-		for (var i = 0; i < 2; i++) {
-			var textureLabel = i % 2 ? "explosion" : "wireframe";
+		// for (var i = 0; i < 6; i++) {
+		// 	var transformations = combineTransformations(input[i*2+1], baseTransformations);
+		// 	// transformations = input[i]
 
-			var transformations = combineTransformations(input[i], baseTransformations);
-			// transformations = input[i]
+		// 	natives.renderTexturedSquare(
+		// 		input[i*2],
+		// 		transformations.x,
+		// 		transformations.y,
+		// 		transformations.z,
+		// 		transformations.angleX,
+		// 		transformations.angleY,
+		// 		transformations.angleZ);
+		// }
 
-			natives.renderTexturedSquare(
-				textureLabel,
-				transformations.x,
-				transformations.y,
-				transformations.z,
-				transformations.angleX,
-				transformations.angleY,
-				transformations.angleZ);
+		var inputNew = [
+			"explosion", {"x": 1, "y": 0, "z": 0, "xa": 0, "ya": 1, "za": 0, "a": 90},
+			"wireframe", {"x": -1, "y": 0, "z": 0, "xa": 0, "ya": -1, "za": 0, "a": 90},
+			"explosion", {"x": 0, "y": 1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
+			"wireframe", {"x": 0, "y": -1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
+			"explosion", {"x": 0, "y": 0, "z": -1, "xa": 0, "ya": 0, "za": 0, "a": 0},
+			"wireframe", {"x": 0, "y": 0, "z": 1, "xa": 0, "ya": 0, "za": 0, "a": 0}
+		];
+		// console.log(inputNew)
+
+		var baseTransformationsNew = {"x": 0, "y": 0, "z": 0, "xa": 1, "ya": 1, "za": 1, "a": state.angle};
+
+		for (var i = 0; i < 6; i++) {
+			var transformationsNew = combineTransformationsNew(inputNew[i*2+1], baseTransformationsNew);
+			natives.renderTexturedSquareNew(
+				inputNew[i*2],
+				transformationsNew.x,
+				transformationsNew.y,
+				transformationsNew.z,
+				transformationsNew.xa,
+				transformationsNew.ya,
+				transformationsNew.za,
+				transformationsNew.a);
 		}
+
+		// alert(JSON.stringify(natives.rotate3dNew(1,0,0, 0,1,0,90)));
+		// alert(JSON.stringify(natives.rotateAxisAngles(0,1,0,90, 0,0,0,0)));
 	}
 }
 

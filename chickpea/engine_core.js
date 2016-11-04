@@ -353,7 +353,7 @@ var chickpea = function() {
 		var program,
 			renderingType = gl.TRIANGLES;
 
-		if (tag === "texturedPolygons") {
+		if (tag === "texturedPolygons" || tag === "texturedPolygonsNew") {
 			program = webgl.programs.texture;
 
 			if (modelData.textureLabel === "wireframe") {
@@ -481,12 +481,48 @@ var chickpea = function() {
 		return quat4.toMat4(tempQuat);
 	}
 
+	function getRotationMatrixNew(x,y,z, angle) {
+		var s = Math.sin(degToRad(angle)*0.5);
+		var quat = quat4.create([x*s, y*s, z*s, Math.cos(degToRad(angle)*0.5)]);
+		// alert(JSON.stringify(quat) + " " + s)
+		return quat4.toMat4(quat4.normalize(quat));
+	}
+
+
 	function rotate3d(x,y,z, xAngle, yAngle, zAngle) {
 		var tempMat = mat4.create();
 
 		mat4.identity(tempMat);
 
-		mat4.multiply(tempMat, getRotationMatrix(xAngle, -yAngle, zAngle), tempMat);
+		mat4.multiply(
+			tempMat, 
+			getRotationMatrix(xAngle, yAngle, zAngle),
+			tempMat);
+
+		mat4.translate(tempMat, [x,y,z]);
+
+		mat4.inverse(tempMat);
+
+		var rx = 0, ry = 0, rz = 0;
+
+		for (var i = 0; i < 3; i++) {
+			rx += tempMat[4*i] * tempMat[12+i];
+			ry += tempMat[1+4*i] * tempMat[12+i];
+			rz += tempMat[2+4*i] * tempMat[12+i];
+		}
+
+		return [-rx, -ry, -rz];
+	}
+
+	function rotate3dNew(x,y,z, xa, ya, za, a) {
+		var tempMat = mat4.create();
+		// alert(JSON.stringify([x,y,z, xa, ya, za, a]))
+		mat4.identity(tempMat);
+
+		mat4.multiply(
+			tempMat, 
+			getRotationMatrixNew(xa, ya, za, a),
+			tempMat);
 
 		mat4.translate(tempMat, [x,y,z]);
 
@@ -508,21 +544,159 @@ var chickpea = function() {
 	}
 
 
-	function rotate3dtwice(x,y,z, xa1, ya1, za1, xa2, ya2, za2) {
+	// function getAnglesFromQuat(someQuat) {
+	// 	someQuat = {"x": someQuat[0], "y": someQuat[1], "z": someQuat[2], "w": someQuat[3]};
+
+	// 	var sqw = someQuat.w*someQuat.w;
+	// 	var sqx = someQuat.x*someQuat.x;
+	// 	var sqy = someQuat.y*someQuat.y;
+	// 	var sqz = someQuat.z*someQuat.z;
+	// 	var unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
+	// 	var test = someQuat.x*someQuat.y + someQuat.z*someQuat.w;
+	// 	if (test > 0.499*unit) { // singularity at north pole
+	// 		var heading = 2 * Math.atan2(someQuat.x,someQuat.w);
+	// 		var attitude = Math.PI/2;
+	// 		var bank = 0;
+	// 		return [radToDeg(attitude),radToDeg(heading),  radToDeg(bank)];
+	// 	}
+	// 	if (test < -0.499*unit) { // singularity at south pole
+	// 		var heading = -2 * Math.atan2(someQuat.x,someQuat.w);
+	// 		var attitude = -Math.PI/2;
+	// 		var bank = 0;
+	// 		return [radToDeg(attitude),radToDeg(heading),  radToDeg(bank)];
+	// 	}
+	//     var heading = Math.atan2(2*someQuat.y*someQuat.w-2*someQuat.x*someQuat.z , sqx - sqy - sqz + sqw);
+	// 	var attitude = Math.asin(2*test/unit);
+	// 	var bank = Math.atan2(2*someQuat.x*someQuat.w-2*someQuat.y*someQuat.z , -sqx + sqy - sqz + sqw)
+
+	// 	return [radToDeg(bank), radToDeg(heading), radToDeg(attitude)];
+	// }
+
+	function toEuler(x, y, z, angle) {
+		var s=Math.sin(angle);
+		var c=Math.cos(angle);
+		var t=1-c;
+
+		//  if axis is not already normalised then uncomment this
+		var magnitude = Math.sqrt(x*x + y*y + z*z);
+		if (magnitude === 0) alert(1);
+		x /= magnitude;
+		y /= magnitude;
+		z /= magnitude;
+
+		var heading, bank, attitude;
+
+		if ((x*y*t + z*s) > 0.998) { // north pole singularity detected
+			heading = 2*Math.atan2(x*Math.sin(angle/2),Math.cos(angle/2));
+			attitude = Math.PI/2;
+			bank = 0;
+		}
+		else if ((x*y*t + z*s) < -0.998) { // south pole singularity detected
+			heading = -2*Math.atan2(x*Math.sin(angle/2),Math.cos(angle/2));
+			attitude = -Math.PI/2;
+			bank = 0;
+		}
+		else {
+			heading = Math.atan2(y * s- x * z * t , 1 - (y*y+ z*z ) * t);
+			attitude = Math.asin(x * y * t + z * s) ;
+			bank = Math.atan2(x * s - y * z * t , 1 - (x*x + z*z) * t);
+		}
+
+		// return [radToDeg(heading), radToDeg(attitude), radToDeg(bank)];
+		// return [radToDeg(heading), radToDeg(bank), radToDeg(attitude)];
+		// return [-radToDeg(attitude), -radToDeg(heading), -radToDeg(bank)];
+		// return [radToDeg(attitude), radToDeg(bank), radToDeg(heading)];
+		// return [radToDeg(bank), radToDeg(attitude), radToDeg(heading)];
+		return [-radToDeg(bank), -radToDeg(heading), radToDeg(attitude)];
+	}
+
+	/**
+	This requires a pure rotation matrix 'm' as input.
+	*/
+	function toAxisAngle(m) {
+		m = [[m[0],m[1],m[2]],[m[4],m[5],m[6]],[m[8],m[9],m[10]]];
+		var angle,x,y,z; // variables for result
+		var epsilon = 0.01; // margin to allow for rounding errors
+		var epsilon2 = 0.1; // margin to distinguish between 0 and 180 degrees
+		// optional check that input is pure rotation, 'isRotationMatrix' is defined at:
+		// http://www.euclideanspace.com/maths/algebra/matrix/orthogonal/rotation/
+		
+		if ((Math.abs(m[0][1]-m[1][0]) < epsilon)
+		  && (Math.abs(m[0][2]-m[2][0]) < epsilon)
+		  && (Math.abs(m[1][2]-m[2][1]) < epsilon)) {
+			// singularity found
+			// first check for identity matrix which must have +1 for all terms
+			//  in leading diagonaland zero in other terms
+			if ((Math.abs(m[0][1]+m[1][0]) < epsilon2)
+			  && (Math.abs(m[0][2]+m[2][0]) < epsilon2)
+			  && (Math.abs(m[1][2]+m[2][1]) < epsilon2)
+			  && (Math.abs(m[0][0]+m[1][1]+m[2][2]-3) < epsilon2)) {
+				// this singularity is identity matrix so angle = 0
+				return toEuler(1,0,0,0); // zero angle, arbitrary axis
+			}
+			// otherwise this singularity is angle = 180
+			angle = Math.PI;
+			var xx = (m[0][0]+1)/2;
+			var yy = (m[1][1]+1)/2;
+			var zz = (m[2][2]+1)/2;
+			var xy = (m[0][1]+m[1][0])/4;
+			var xz = (m[0][2]+m[2][0])/4;
+			var yz = (m[1][2]+m[2][1])/4;
+			if ((xx > yy) && (xx > zz)) { // m[0][0] is the largest diagonal term
+				if (xx< epsilon) {
+					x = 0;
+					y = 0.7071;
+					z = 0.7071;
+				} else {
+					x = Math.sqrt(xx);
+					y = xy/x;
+					z = xz/x;
+				}
+			} else if (yy > zz) { // m[1][1] is the largest diagonal term
+				if (yy< epsilon) {
+					x = 0.7071;
+					y = 0;
+					z = 0.7071;
+				} else {
+					y = Math.sqrt(yy);
+					x = xy/y;
+					z = yz/y;
+				}	
+			} else { // m[2][2] is the largest diagonal term so base result on this
+				if (zz< epsilon) {
+					x = 0.7071;
+					y = 0.7071;
+					z = 0;
+				} else {
+					z = Math.sqrt(zz);
+					x = xz/z;
+					y = yz/z;
+				}
+			}
+			return toEuler(x,y,z,angle); // return 180 deg rotation
+		}
+		// as we have reached here there are no singularities so we can handle normally
+		var s = Math.sqrt((m[2][1] - m[1][2])*(m[2][1] - m[1][2])
+			+(m[0][2] - m[2][0])*(m[0][2] - m[2][0])
+			+(m[1][0] - m[0][1])*(m[1][0] - m[0][1])); // used to normalise
+		if (Math.abs(s) < 0.001) s=1; 
+			// prevent divide by zero, should not happen if matrix is orthogonal and should be
+			// caught by singularity test above, but I've left it in just in case
+		angle = Math.acos(( m[0][0] + m[1][1] + m[2][2] - 1)/2);
+		x = (m[2][1] - m[1][2])/s;
+		y = (m[0][2] - m[2][0])/s;
+		z = (m[1][0] - m[0][1])/s;
+	   return toEuler(x,y,z,angle);
+	}
+
+	function rotate3dAngles(xa1, ya1, za1, xa2, ya2, za2) {
 		var angleMat = mat4.create();
 
 		mat4.identity(angleMat);
 
-		mat4.multiply(angleMat, getRotationMatrix(xa2, -ya2, za2), angleMat);
-		// mat4.rotate(angleMat, degToRad(ya2), [0,1,0]);
-		// mat4.rotate(angleMat, degToRad(za2/2), [0,0,1]);
-
-		// mat4.rotate(angleMat, degToRad(ya1), [0,1,0]);
-		// mat4.rotate(angleMat, degToRad(za1/2), [0,0,1]);
-
 		mat4.multiply(angleMat, getRotationMatrix(xa1, ya1, za1), angleMat);
 
-		mat4.translate(angleMat, [x,y,z]);
+		mat4.multiply(angleMat, getRotationMatrix(xa2, ya2, za2), angleMat);
 
 		mat4.inverse(angleMat);
 
@@ -530,11 +704,48 @@ var chickpea = function() {
 		var angleY = Math.atan2(-angleMat[8], Math.sqrt(angleMat[9]*angleMat[9] + angleMat[10]*angleMat[10]));
 		var angleZ = Math.atan2(angleMat[4], angleMat[0]);
 
+		// return toAxisAngle(angleMat);
 
-		var tempPoint = rotate3d(x,y,z, xa2,ya2,za2)
+		// alert(JSON.stringify([-radToDeg(angleX), -radToDeg(angleY), -radToDeg(angleZ)]))
 
+		// // alert(Math.sign(za1+za2))
+		// // angleX = -degToRad(xa1+xa2);
+		// // angleY = -degToRad(ya1+ya2);
+		// // angleZ = -degToRad(za1+za2);
+		return [-radToDeg(angleX), -radToDeg(angleY), -radToDeg(angleZ)];
+	}
 
-		return [tempPoint[0], tempPoint[1], tempPoint[2], radToDeg(angleX), radToDeg(angleY), radToDeg(angleZ)];
+	function getAxisAngleFromQuat(quat) {
+		if (quat[3] > 1) quat4.normalize(quat); // if w>1 acos and sqrt will produce errors, this cant happen if quaternion is normalised
+		var angle = 2 * Math.acos(quat[3]);
+		var s = Math.sqrt(1-quat[3]*quat[3]); // assuming quaternion normalised then w is less than 1, so term always positive.
+		var x,y,z;
+		if (s < 0.00001) { // test to avoid divide by zero, s is always positive due to sqrt
+			// if s close to zero then direction of axis not important
+			x = quat[0]; // if it is important that axis is normalised then replace with x=1; y=z=0;
+			y = quat[1];
+			z = quat[2];
+		}
+		else {
+			x = quat[0]/s; // normalize axis
+			y = quat[1]/s;
+			z = quat[2]/s;
+		}
+
+		return [x,y,z, radToDeg(angle)];
+	}
+
+	function rotateAxisAngles(xa1,ya1,za1, a1, xa2,ya2,za2, a2) {
+		var s = Math.sin(degToRad(a1)*0.5);
+		var quat1 = quat4.create([xa1*s, ya1*s, za1*s, Math.cos(degToRad(a1)*0.5)]);
+
+		s = Math.sin(degToRad(a2)*0.5);
+		var quat2 = quat4.create([xa2*s, ya2*s, za2*s, Math.cos(degToRad(a2)*0.5)]);
+
+		quat4.multiply(quat2, quat1, quat2);
+		// quat4.inverse(quat2)
+		// alert(JSON.stringify(quat) + " " + s)
+		return getAxisAngleFromQuat(quat2);
 	}
 
 	function prepareData(
@@ -561,6 +772,51 @@ var chickpea = function() {
 				sideEffectObject.colors.push(g);
 				sideEffectObject.colors.push(b);
 				sideEffectObject.colors.push(a);
+			}
+		}
+
+		if (textureLabel)
+			sideEffectObject.textureLabel = textureLabel;
+
+		var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
+		for (var j = 0; j < indices.length; j++) {
+			sideEffectObject.indices.push(indices[j]+vertexCount);
+		}
+
+		if (normals) {
+			for (var j = 0; j < normals.length; j++) {
+				sideEffectObject.vertexNormals.push(normals[j]);
+			}
+		}
+
+		if (lightX || lightX === 0)
+			sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
+	}
+
+	function prepareDataNew(
+		sideEffectObject, vertices, indices, textureCoords, textureLabel,
+		x,y,z, xa,ya,za, a, r,g,b,alpha,
+		normals, lightX, lightY, lightZ) {
+
+		for (var j = 0; j < vertices.length/3; j++) {
+			var tempVertex = rotate3dNew(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za, a);
+
+			tempVertex = translate(tempVertex, x,y,z);
+
+			sideEffectObject.vertices.push(tempVertex[0]);
+			sideEffectObject.vertices.push(tempVertex[1]);
+			sideEffectObject.vertices.push(tempVertex[2]);
+
+			if (textureCoords) {
+				sideEffectObject.textureCoords.push(textureCoords[j*2]);
+				sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
+			}
+
+			if (r || r === 0) {
+				sideEffectObject.colors.push(r);
+				sideEffectObject.colors.push(g);
+				sideEffectObject.colors.push(b);
+				sideEffectObject.colors.push(alpha);
 			}
 		}
 
@@ -612,6 +868,43 @@ var chickpea = function() {
 				vertices, indices, textureCoords, textureLabel,
 				x,y,z, xa,ya,za,
 				r,g,b,a,
+				normals, lightX, lightY, lightZ);
+		}
+
+		return modelData;
+	}
+
+	function prepareAllDataNew(data) {
+		var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
+
+		for (var i = 0; i < data.length; i++) {
+			var drawCommand = data[i];
+
+			var vertices = drawCommand[0],
+				indices = drawCommand[1],
+				x = drawCommand[2] || 0,
+				y = drawCommand[3] || 0,
+				z = drawCommand[4] || 0,
+				xa = drawCommand[5],
+				ya = drawCommand[6],
+				za = drawCommand[7],
+				a = drawCommand[8],
+				textureCoords = drawCommand[9],
+				textureLabel = drawCommand[10],
+				r = drawCommand[11],
+				g = drawCommand[12],
+				b = drawCommand[13],
+				alpha = drawCommand[14],
+				normals = drawCommand[15],
+				lightX = drawCommand[16],
+				lightY = drawCommand[17],
+				lightZ = drawCommand[18];
+				// alert(a)
+			prepareDataNew(
+				modelData,
+				vertices, indices, textureCoords, textureLabel,
+				x,y,z, xa,ya,za, a,
+				r,g,b,alpha,
 				normals, lightX, lightY, lightZ);
 		}
 
@@ -725,6 +1018,11 @@ var chickpea = function() {
 
 			renderUsingShaderProgram(tag, webgl, modelData);
 		}
+		else if (tag === "texturedPolygonsNew") {
+			var modelData = prepareAllDataNew(data);
+
+			renderUsingShaderProgram(tag, webgl, modelData);
+		}
 	}
 
 	function processQueuedCommands(internalData) {
@@ -741,6 +1039,9 @@ var chickpea = function() {
 			var identifier = tag;
 			if (tag === "texturedPolygons")
 				identifier += drawCommand[9]; //textureLabel
+
+			if (tag === "texturedPolygonsNew")
+				identifier += drawCommand[10]; //textureLabel
 
 			if (oldIdentifier === null) {
 				temp.push(drawCommand);
@@ -820,6 +1121,10 @@ var chickpea = function() {
 				var squareData = generateSquareModelData();
 				internalData.drawQueue.push({"tag":"texturedPolygons", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, squareData.textureCoords, label]});
 			},
+			"renderTexturedSquareNew": function(label, x, y, z, xa, ya, za, a) {
+				var squareData = generateSquareModelData();
+				internalData.drawQueue.push({"tag":"texturedPolygonsNew", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, a, squareData.textureCoords, label]});
+			},
 			"renderOneColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
 				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a]});
 			},
@@ -829,8 +1134,14 @@ var chickpea = function() {
 			"rotate3d": function(x, y, z, angleX, angleY, angleZ) {
 				return rotate3d(x, y, z, angleX, angleY, angleZ);
 			},
-			"rotate3dtwice": function(x, y, z, angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2) {
-				return rotate3dtwice(x, y, z, angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2);
+			"rotate3dNew": function(x, y, z, xa, ya, za, a) {
+				return rotate3dNew(x, y, z, xa,ya,za, a);
+			},
+			"rotateAxisAngles": function(xa1,ya1,za1, a1, xa2,ya2,za2, a2) {
+				return rotateAxisAngles(xa1,ya1,za1, a1, xa2,ya2,za2, a2);
+			},
+			"rotate3dAngles": function(angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2) {
+				return rotate3dAngles(angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2);
 			}
 		};
 	}
