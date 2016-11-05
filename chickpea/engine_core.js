@@ -45,10 +45,11 @@
 	 * disableAlphaBlending (disable WebGL feature for drawing images with transparency)
 	 * enableDepthTesting (enable WebGL feature that makes drawing order dependent on coordinates)
 	 * disableDepthTesting (enable WebGL feature that makes drawing order dependent on draw call order)
-	 * renderTexturedSquare (draw square with specified texture with specified coordinate transformation)
-	 * renderOneColoredPolygons (draw polygons useing vertices, indices, rgba color, xyz coordinates and rotation angles)
+	 * renderTexturedSquare (draw square with specified texture with specified coordinate transformations)
+	 * renderOneColoredPolygons (draw polygons using vertices, indices, rgba color, xyz coordinates and axis angle)
 	 * renderOneColoredLitPolygons (like ColoredPolygons but includes normals and light source position WORK IN PROGRESS)
-	 * rotate3d (helper for manipulating vector)
+	 * rotate3d (helper for rotating vector with axis angle)
+	 * rotateAxisAngles (combine two axis angles)
 
 	***Tough design decisions***
 	Context: If every shader needs different number of uniforms/attributes.
@@ -70,6 +71,22 @@
 	colors and etc.
 
 	Pros/Cons: More code, yet it was necessary to make features like alpha blending to be dynamic.
+
+
+	Context: Drawing multiple objects with different rotation requires some transformation management.
+
+	Question: Should I try to make a "magical" API or make it more "low-level"?
+	
+	My decision: If I am planning to use API extensively I want it to be as sumb as possible.
+	So i decided to go for lower-level approach. Let me explain the idea behind orientation and position.
+	Each object in space has one and only one position and orientation. So it is the job of user script
+	to calculate the final one from multiple transformations if they happened. And orientation can
+	be specified properly only through 4 numbers. I decided to go for axis angle representation instead of
+	quaternion one even if this requires some additional computations. Because it is easier to interpret
+	axis with rotation around it by an angle than some quaternion WTF fest. Even if quaternions are used
+	"inside".
+
+	Pros/Cons: API became harder to use. Yet it became more sophisticated and robust.
  */
 
 "use strict";
@@ -353,7 +370,7 @@ var chickpea = function() {
 		var program,
 			renderingType = gl.TRIANGLES;
 
-		if (tag === "texturedPolygons" || tag === "texturedPolygonsNew") {
+		if (tag === "texturedPolygons") {
 			program = webgl.programs.texture;
 
 			if (modelData.textureLabel === "wireframe") {
@@ -472,14 +489,6 @@ var chickpea = function() {
 		return degrees * Math.PI / 180;
 	}
 
-	function getRotationMatrix(xAngle, yAngle, zAngle) {
-		var tempQuat = quat4.create([0,0,0, 1]);
-		quat4.multiply(tempQuat, quat4.create([Math.sin(degToRad(xAngle)/2),0,0, Math.cos(degToRad(xAngle)/2)]), tempQuat);
-		quat4.multiply(tempQuat, quat4.create([0,Math.sin(degToRad(yAngle)/2),0, Math.cos(degToRad(yAngle)/2)]), tempQuat);
-		quat4.multiply(tempQuat, quat4.create([0,0,Math.sin(degToRad(zAngle)/2), Math.cos(degToRad(zAngle)/2)]), tempQuat);
-		quat4.normalize(tempQuat);
-		return quat4.toMat4(tempQuat);
-	}
 
 	function getQuatFromAxisAngle(x,y,z, angle) {
 		var vectorLength = Math.sqrt(x*x+y*y+z*z);
@@ -493,35 +502,10 @@ var chickpea = function() {
 		return quat4.create([x*s, y*s, z*s, Math.cos(degToRad(angle)*0.5)]);
 	}
 
-	function getRotationMatrixNew(x,y,z, angle) {
+	function getRotationMatrix(x,y,z, angle) {
 		return quat4.toMat4(quat4.normalize(getQuatFromAxisAngle(x,y,z, angle)));
 	}
 
-
-	function rotate3d(x,y,z, xAngle, yAngle, zAngle) {
-		var tempMat = mat4.create();
-
-		mat4.identity(tempMat);
-
-		mat4.multiply(
-			tempMat, 
-			getRotationMatrix(xAngle, yAngle, zAngle),
-			tempMat);
-
-		mat4.translate(tempMat, [x,y,z]);
-
-		mat4.inverse(tempMat);
-
-		var rx = 0, ry = 0, rz = 0;
-
-		for (var i = 0; i < 3; i++) {
-			rx += tempMat[4*i] * tempMat[12+i];
-			ry += tempMat[1+4*i] * tempMat[12+i];
-			rz += tempMat[2+4*i] * tempMat[12+i];
-		}
-
-		return [-rx, -ry, -rz];
-	}
 
 	// https://en.wikipedia.org/wiki/Quaternion#Hamilton_product
 	function hamiltonProduct(q1, q2) {
@@ -534,7 +518,7 @@ var chickpea = function() {
 	}
 
 	// http://math.stackexchange.com/questions/40164/how-do-you-rotate-a-vector-by-a-unit-quaternion answer from Doug
-	function rotate3dNew(x,y,z, xa, ya, za, a) {
+	function rotate3d(x,y,z, xa, ya, za, a) {
 		var someQuat = getQuatFromAxisAngle(xa,ya,za, a);
 		var someQuatR = getQuatFromAxisAngle(-xa,-ya,-za, a);
 
@@ -549,38 +533,23 @@ var chickpea = function() {
 	}
 
 
-	function rotate3dAngles(xa1, ya1, za1, xa2, ya2, za2) {
-		var angleMat = mat4.create();
-
-		mat4.identity(angleMat);
-
-		mat4.multiply(angleMat, getRotationMatrix(xa1, ya1, za1), angleMat);
-
-		mat4.multiply(angleMat, getRotationMatrix(xa2, ya2, za2), angleMat);
-
-		mat4.inverse(angleMat);
-
-		var angleX = Math.atan2(angleMat[9], angleMat[10]);
-		var angleY = Math.atan2(-angleMat[8], Math.sqrt(angleMat[9]*angleMat[9] + angleMat[10]*angleMat[10]));
-		var angleZ = Math.atan2(angleMat[4], angleMat[0]);
-
-
-		return [-radToDeg(angleX), -radToDeg(angleY), -radToDeg(angleZ)];
-	}
-
+	// http://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToAngle/index.htm
 	function getAxisAngleFromQuat(quat) {
-		if (quat[3] > 1) quat4.normalize(quat); // if w>1 acos and sqrt will produce errors, this cant happen if quaternion is normalised
+		if (quat[3] > 1) quat4.normalize(quat);
+
 		var angle = 2 * Math.acos(quat[3]);
-		var s = Math.sqrt(1-quat[3]*quat[3]); // assuming quaternion normalised then w is less than 1, so term always positive.
+		var s = Math.sqrt(1-quat[3]*quat[3]);
+
 		var x,y,z;
-		if (s < 0.00001) { // test to avoid divide by zero, s is always positive due to sqrt
-			// if s close to zero then direction of axis not important
-			x = quat[0]; // if it is important that axis is normalised then replace with x=1; y=z=0;
+
+		if (s < 0.00001) {
+			x = quat[0];
 			y = quat[1];
 			z = quat[2];
 		}
 		else {
-			x = quat[0]/s; // normalize axis
+			// normalize axis
+			x = quat[0]/s;
 			y = quat[1]/s;
 			z = quat[2]/s;
 		}
@@ -599,58 +568,14 @@ var chickpea = function() {
 		return getAxisAngleFromQuat(quat2);
 	}
 
+
 	function prepareData(
-		sideEffectObject, vertices, indices, textureCoords, textureLabel,
-		x,y,z, xa,ya,za, r,g,b,a,
-		normals, lightX, lightY, lightZ) {
-
-		for (var j = 0; j < vertices.length/3; j++) {
-			var tempVertex = rotate3d(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za);
-
-			tempVertex = translate(tempVertex, x,y,z);
-
-			sideEffectObject.vertices.push(tempVertex[0]);
-			sideEffectObject.vertices.push(tempVertex[1]);
-			sideEffectObject.vertices.push(tempVertex[2]);
-
-			if (textureCoords) {
-				sideEffectObject.textureCoords.push(textureCoords[j*2]);
-				sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
-			}
-
-			if (r || r === 0) {
-				sideEffectObject.colors.push(r);
-				sideEffectObject.colors.push(g);
-				sideEffectObject.colors.push(b);
-				sideEffectObject.colors.push(a);
-			}
-		}
-
-		if (textureLabel)
-			sideEffectObject.textureLabel = textureLabel;
-
-		var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
-		for (var j = 0; j < indices.length; j++) {
-			sideEffectObject.indices.push(indices[j]+vertexCount);
-		}
-
-		if (normals) {
-			for (var j = 0; j < normals.length; j++) {
-				sideEffectObject.vertexNormals.push(normals[j]);
-			}
-		}
-
-		if (lightX || lightX === 0)
-			sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
-	}
-
-	function prepareDataNew(
 		sideEffectObject, vertices, indices, textureCoords, textureLabel,
 		x,y,z, xa,ya,za, a, r,g,b,alpha,
 		normals, lightX, lightY, lightZ) {
 
 		for (var j = 0; j < vertices.length/3; j++) {
-			var tempVertex = rotate3dNew(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za, a);
+			var tempVertex = rotate3d(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za, a);
 
 			tempVertex = translate(tempVertex, x,y,z);
 
@@ -689,43 +614,8 @@ var chickpea = function() {
 			sideEffectObject.lightPos = {"x": lightX, "y": lightY, "z": lightZ};
 	}
 
+
 	function prepareAllData(data) {
-		var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
-
-		for (var i = 0; i < data.length; i++) {
-			var drawCommand = data[i];
-
-			var vertices = drawCommand[0],
-				indices = drawCommand[1],
-				x = drawCommand[2] || 0,
-				y = drawCommand[3] || 0,
-				z = drawCommand[4] || 0,
-				xa = drawCommand[5],
-				ya = drawCommand[6],
-				za = drawCommand[7],
-				textureCoords = drawCommand[8],
-				textureLabel = drawCommand[9],
-				r = drawCommand[10],
-				g = drawCommand[11],
-				b = drawCommand[12],
-				a = drawCommand[13],
-				normals = drawCommand[14],
-				lightX = drawCommand[15],
-				lightY = drawCommand[16],
-				lightZ = drawCommand[17];
-
-			prepareData(
-				modelData,
-				vertices, indices, textureCoords, textureLabel,
-				x,y,z, xa,ya,za,
-				r,g,b,a,
-				normals, lightX, lightY, lightZ);
-		}
-
-		return modelData;
-	}
-
-	function prepareAllDataNew(data) {
 		var modelData = {"vertices":[], "indices":[], "colors":[], "textureCoords":[], "vertexNormals": []};
 
 		for (var i = 0; i < data.length; i++) {
@@ -750,8 +640,8 @@ var chickpea = function() {
 				lightX = drawCommand[16],
 				lightY = drawCommand[17],
 				lightZ = drawCommand[18];
-				// alert(a)
-			prepareDataNew(
+
+			prepareData(
 				modelData,
 				vertices, indices, textureCoords, textureLabel,
 				x,y,z, xa,ya,za, a,
@@ -767,7 +657,7 @@ var chickpea = function() {
 		var resultMatrix = mat4.create();
 		mat4.identity(resultMatrix);
 		mat4.translate(resultMatrix, [xPos, yPos, zPos]);
-		mat4.multiply(resultMatrix, getRotationMatrixNew(xa,ya,za, a), resultMatrix);
+		mat4.multiply(resultMatrix, getRotationMatrix(xa,ya,za, a), resultMatrix);
 		mat4.inverse(resultMatrix);
 
 		return resultMatrix;
@@ -862,13 +752,8 @@ var chickpea = function() {
 		}
 		else if (tag === "texturedPolygons"
 				|| tag === "coloredPolygons"
-				|| tag === "coloredLitPolygons" ) {
+				|| tag === "coloredLitPolygons") {
 			var modelData = prepareAllData(data);
-
-			renderUsingShaderProgram(tag, webgl, modelData);
-		}
-		else if (tag === "texturedPolygonsNew") {
-			var modelData = prepareAllDataNew(data);
 
 			renderUsingShaderProgram(tag, webgl, modelData);
 		}
@@ -887,9 +772,6 @@ var chickpea = function() {
 
 			var identifier = tag;
 			if (tag === "texturedPolygons")
-				identifier += drawCommand[9]; //textureLabel
-
-			if (tag === "texturedPolygonsNew")
 				identifier += drawCommand[10]; //textureLabel
 
 			if (oldIdentifier === null) {
@@ -944,13 +826,16 @@ var chickpea = function() {
 				return [internalData.webgl.canvas.width, internalData.webgl.canvas.height];
 			},
 			"setViewport": function(width, height) {
-				internalData.drawQueue.push({"tag":"setViewport", data: {"width": width, "height": height}});
+				internalData.drawQueue.push({"tag":"setViewport", "data": {"width": width, "height": height}});
 			},
-			"setCamera": function(x, y, z, xa, ya, za, a) {
-				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z, "xa": xa, "ya": ya, "za":za, "a":a}});
+			"setCamera": function(x,y,z, xa,ya,za,a) {
+				internalData.drawQueue.push({
+					"tag":"setCamera",
+					"data": {"x": x, "y": y, "z": z, "xa": xa, "ya": ya, "za": za, "a": a}
+				});
 			},
 			"clearScreen": function(r, g, b) {
-				internalData.drawQueue.push({"tag":"clearScreen", data: {"r": r, "g": g, "b":b}});
+				internalData.drawQueue.push({"tag":"clearScreen", "data": {"r": r, "g": g, "b": b}});
 			},
 			"enableAlphaBlending": function() {
 				//http://delphic.me.uk/webglalpha.html
@@ -966,32 +851,40 @@ var chickpea = function() {
 			"disableDepthTesting": function() {
 				internalData.drawQueue.push({"tag":"disableDepth"});
 			},
-			"renderTexturedSquare": function(label, x, y, z, xa, ya, za) {
+			"renderTexturedSquare": function(label, x,y,z, xa,ya,za,a) {
 				var squareData = generateSquareModelData();
-				internalData.drawQueue.push({"tag":"texturedPolygons", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, squareData.textureCoords, label]});
+				internalData.drawQueue.push({
+					"tag":"texturedPolygons",
+					"data":[
+						squareData.vertices, squareData.indices, x,y,z, xa,ya,za,a,
+						squareData.textureCoords, label
+					]
+				});
 			},
-			"renderTexturedSquareNew": function(label, x, y, z, xa, ya, za, a) {
-				var squareData = generateSquareModelData();
-				internalData.drawQueue.push({"tag":"texturedPolygonsNew", "data":[squareData.vertices, squareData.indices, x,y,z, xa,ya,za, a, squareData.textureCoords, label]});
+			"renderOneColoredPolygons": function(vertices, indices, r,g,b,alpha, x,y,z, xa,ya,za,a) {
+				internalData.drawQueue.push({
+					"tag":"coloredPolygons",
+					"data":[
+						vertices, indices, x,y,z, xa,ya,za,a,
+						null,null, r,g,b,alpha
+					]
+				});
 			},
-			"renderOneColoredPolygons": function(vertices, indices, r,g,b,a, x,y,z, xa,ya,za) {
-				internalData.drawQueue.push({"tag":"coloredPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a]});
+			"renderOneColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,alpha, x,y,z, xa,ya,za,a) {
+				internalData.drawQueue.push({
+					"tag":"coloredLitPolygons",
+					"data":[
+						vertices, indices, x,y,z, xa,ya,za,a,
+						null,null, r,g,b,alpha, normals, lX,lY,lZ
+					]
+				});
 			},
-			"renderOneColoredLitPolygons": function(vertices, indices, normals, lX,lY,lZ, r,g,b,a, x,y,z, xa,ya,za) {
-				internalData.drawQueue.push({"tag":"coloredLitPolygons", "data":[vertices, indices, x,y,z, xa,ya,za, null,null, r,g,b,a, normals, lX,lY,lZ]});
+			"rotate3d": function(x,y,z, xa,ya,za,a) {
+				return rotate3d(x, y, z, xa,ya,za, a);
 			},
-			"rotate3d": function(x, y, z, angleX, angleY, angleZ) {
-				return rotate3d(x, y, z, angleX, angleY, angleZ);
-			},
-			"rotate3dNew": function(x, y, z, xa, ya, za, a) {
-				return rotate3dNew(x, y, z, xa,ya,za, a);
-			},
-			"rotateAxisAngles": function(xa1,ya1,za1, a1, xa2,ya2,za2, a2) {
+			"rotateAxisAngles": function(xa1,ya1,za1,a1, xa2,ya2,za2,a2) {
 				return rotateAxisAngles(xa1,ya1,za1, a1, xa2,ya2,za2, a2);
 			},
-			"rotate3dAngles": function(angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2) {
-				return rotate3dAngles(angleX1, angleY1, angleZ1, angleX2, angleY2, angleZ2);
-			}
 		};
 	}
 
