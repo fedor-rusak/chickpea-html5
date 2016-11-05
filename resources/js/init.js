@@ -253,15 +253,13 @@ function init(userScriptFunctions, natives) {
 	state.angle = 0;//state.testAngle-1;
 	state.step = 0.5;
 	state.sign = +1;
-	state.radius = 0;
+	state.radius = 1.5;
 
 	userScriptFunctions.render = function() {
 		var radians = state.angle*Math.PI/180;
 
 		// startData[5].x = Math.sin(radians)*state.radius;
 		// startData[5].y = Math.cos(radians)*state.radius;
-
-		state.radius += state.sign*state.step;
 
 
 		state.angle += state.step * state.sign;
@@ -299,17 +297,28 @@ function init(userScriptFunctions, natives) {
 		baseTransformations = combineTransformations(baseTransformations, baseBaseTransformations)
 
 
-		natives.clearScreen(0.1, 0.2, 0.3)
-		natives.setCamera(0,0,7);
+		natives.clearScreen(0.1, 0.2, 0.3);
 
-		var input = [
-			"explosion", {"x": 1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
-			"wireframe", {"x": -1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
-			"explosion", {"x": 0, "y": 1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
-			"wireframe", {"x": 0, "y": -1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
-			"explosion", {"x": 0, "y": 0, "z": -1, "angleX": 0, "angleY": 0, "angleZ": 0},
-			"wireframe", {"x": 0, "y": 0, "z": 1, "angleX": 0, "angleY": 0, "angleZ": 0}
-		];
+
+		var point = natives.rotate3dNew(
+			Math.sin(radians)*state.radius,
+			Math.cos(radians)*state.radius,
+			10, 1,1,1, -state.angle);
+
+		natives.setCamera(
+			point[0],
+			point[1],
+			point[2],
+			1,1,1, state.angle);
+
+		// var input = [
+		// 	"explosion", {"x": 1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
+		// 	"wireframe", {"x": -1, "y": 0, "z": 0, "angleX": 0, "angleY": 90, "angleZ": 0},
+		// 	"explosion", {"x": 0, "y": 1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
+		// 	"wireframe", {"x": 0, "y": -1, "z": 0, "angleX": 90, "angleY": 0, "angleZ": 0},
+		// 	"explosion", {"x": 0, "y": 0, "z": -1, "angleX": 0, "angleY": 0, "angleZ": 0},
+		// 	"wireframe", {"x": 0, "y": 0, "z": 1, "angleX": 0, "angleY": 0, "angleZ": 0}
+		// ];
 
 		// alert(JSON.stringify(natives.rotate3dAngles(0,55,0, 0,45,0)))
 		// alert(JSON.stringify(natives.rotate3d(1,0,0, 0,90,0)))

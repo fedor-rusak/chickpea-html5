@@ -763,15 +763,11 @@ var chickpea = function() {
 	}
 
 
-	function generateViewMatrix(xPos, yPos, zPos, xAngle, yAngle) {
-		var xPos = xPos || 0, yPos = yPos || 0, zPos = zPos || 0,
-			xAngle = xAngle || 0, yAngle = yAngle || 0;
-
+	function generateViewMatrix(xPos, yPos, zPos, xa, ya, za, a) {
 		var resultMatrix = mat4.create();
 		mat4.identity(resultMatrix);
 		mat4.translate(resultMatrix, [xPos, yPos, zPos]);
-		mat4.rotate(resultMatrix, degToRad(xAngle), [1, 0, 0]);
-		mat4.rotate(resultMatrix, degToRad(yAngle), [0, 1, 0]);
+		mat4.multiply(resultMatrix, getRotationMatrixNew(xa,ya,za, a), resultMatrix);
 		mat4.inverse(resultMatrix);
 
 		return resultMatrix;
@@ -815,11 +811,13 @@ var chickpea = function() {
 			var x = dataElement.x,
 				y = dataElement.y,
 				z = dataElement.z,
-				xAngle = dataElement.xAngle || 0,
-				yAngle = dataElement.yAngle || 0;
+				xa = dataElement.xa || 0,
+				ya = dataElement.ya || 0,
+				za = dataElement.za || 0,
+				a = dataElement.a || 0;
 
-			webgl.vMatrix = generateViewMatrix(x, y, z, xAngle, yAngle);
-			webgl.unprojectVMatrix = generateViewMatrix(x, -y, z, -xAngle, yAngle);
+			webgl.vMatrix = generateViewMatrix(x, y, z, xa, ya, za, a);
+			webgl.unprojectVMatrix = generateViewMatrix(x, -y, z, -xa, ya, za, a);
 
 			var normalMatrix = mat3.create();
 			mat4.toInverseMat3(webgl.vMatrix, normalMatrix);
@@ -948,8 +946,8 @@ var chickpea = function() {
 			"setViewport": function(width, height) {
 				internalData.drawQueue.push({"tag":"setViewport", data: {"width": width, "height": height}});
 			},
-			"setCamera": function(x, y, z, xAngle, yAngle) {
-				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z, "xAngle": xAngle, "yAngle": yAngle}});
+			"setCamera": function(x, y, z, xa, ya, za, a) {
+				internalData.drawQueue.push({"tag":"setCamera", data: {"x": x, "y": y, "z": z, "xa": xa, "ya": ya, "za":za, "a":a}});
 			},
 			"clearScreen": function(r, g, b) {
 				internalData.drawQueue.push({"tag":"clearScreen", data: {"r": r, "g": g, "b":b}});
