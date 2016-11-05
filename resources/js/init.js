@@ -333,7 +333,7 @@ function init(userScriptFunctions, natives) {
 
 		var inputNew = [
 			"explosion", {"x": 1, "y": 0, "z": 0, "xa": 0, "ya": 1, "za": 0, "a": 90},
-			"wireframe", {"x": -1, "y": 0, "z": 0, "xa": 0, "ya": -1, "za": 0, "a": 90},
+			"wireframe", {"x": -1, "y": 0, "z": 0, "xa": 0, "ya": -0.1, "za": 0, "a": 90},
 			"explosion", {"x": 0, "y": 1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
 			"wireframe", {"x": 0, "y": -1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
 			"explosion", {"x": 0, "y": 0, "z": -1, "xa": 0, "ya": 0, "za": 0, "a": 0},

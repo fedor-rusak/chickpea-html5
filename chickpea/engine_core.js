@@ -481,11 +481,20 @@ var chickpea = function() {
 		return quat4.toMat4(tempQuat);
 	}
 
-	function getRotationMatrixNew(x,y,z, angle) {
+	function getQuatFromAxisAngle(x,y,z, angle) {
+		var vectorLength = Math.sqrt(x*x+y*y+z*z);
+
+		if (vectorLength !== 0) {
+			x /= vectorLength;
+			y /= vectorLength;
+			z /= vectorLength;
+		}
 		var s = Math.sin(degToRad(angle)*0.5);
-		var quat = quat4.create([x*s, y*s, z*s, Math.cos(degToRad(angle)*0.5)]);
-		// alert(JSON.stringify(quat) + " " + s)
-		return quat4.toMat4(quat4.normalize(quat));
+		return quat4.create([x*s, y*s, z*s, Math.cos(degToRad(angle)*0.5)]);
+	}
+
+	function getRotationMatrixNew(x,y,z, angle) {
+		return quat4.toMat4(quat4.normalize(getQuatFromAxisAngle(x,y,z, angle)));
 	}
 
 
@@ -514,180 +523,31 @@ var chickpea = function() {
 		return [-rx, -ry, -rz];
 	}
 
+	// https://en.wikipedia.org/wiki/Quaternion#Hamilton_product
+	function hamiltonProduct(q1, q2) {
+		var w = q1[3]*q2[3] - q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2],
+			x = q1[3]*q2[0] + q1[0]*q2[3] + q1[1]*q2[2] - q1[2]*q2[1],
+			y = q1[3]*q2[1] - q1[0]*q2[2] + q1[1]*q2[3] + q1[2]*q2[0],
+			z = q1[3]*q2[2] + q1[0]*q2[1] - q1[1]*q2[0] + q1[2]*q2[3];
+
+		return [x,y,z, w];
+	}
+
+	// http://math.stackexchange.com/questions/40164/how-do-you-rotate-a-vector-by-a-unit-quaternion answer from Doug
 	function rotate3dNew(x,y,z, xa, ya, za, a) {
-		var tempMat = mat4.create();
-		// alert(JSON.stringify([x,y,z, xa, ya, za, a]))
-		mat4.identity(tempMat);
+		var someQuat = getQuatFromAxisAngle(xa,ya,za, a);
+		var someQuatR = getQuatFromAxisAngle(-xa,-ya,-za, a);
 
-		mat4.multiply(
-			tempMat, 
-			getRotationMatrixNew(xa, ya, za, a),
-			tempMat);
+		var result = hamiltonProduct(hamiltonProduct(someQuat,[x,y,z,0]), someQuatR);
 
-		mat4.translate(tempMat, [x,y,z]);
 
-		mat4.inverse(tempMat);
-
-		var rx = 0, ry = 0, rz = 0;
-
-		for (var i = 0; i < 3; i++) {
-			rx += tempMat[4*i] * tempMat[12+i];
-			ry += tempMat[1+4*i] * tempMat[12+i];
-			rz += tempMat[2+4*i] * tempMat[12+i];
-		}
-
-		return [-rx, -ry, -rz];
+		return [result[0], result[1], result[2]];
 	}
 
 	function radToDeg(rads) {
 		return rads * 180 / Math.PI;
 	}
 
-
-	// function getAnglesFromQuat(someQuat) {
-	// 	someQuat = {"x": someQuat[0], "y": someQuat[1], "z": someQuat[2], "w": someQuat[3]};
-
-	// 	var sqw = someQuat.w*someQuat.w;
-	// 	var sqx = someQuat.x*someQuat.x;
-	// 	var sqy = someQuat.y*someQuat.y;
-	// 	var sqz = someQuat.z*someQuat.z;
-	// 	var unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
-	// 	var test = someQuat.x*someQuat.y + someQuat.z*someQuat.w;
-	// 	if (test > 0.499*unit) { // singularity at north pole
-	// 		var heading = 2 * Math.atan2(someQuat.x,someQuat.w);
-	// 		var attitude = Math.PI/2;
-	// 		var bank = 0;
-	// 		return [radToDeg(attitude),radToDeg(heading),  radToDeg(bank)];
-	// 	}
-	// 	if (test < -0.499*unit) { // singularity at south pole
-	// 		var heading = -2 * Math.atan2(someQuat.x,someQuat.w);
-	// 		var attitude = -Math.PI/2;
-	// 		var bank = 0;
-	// 		return [radToDeg(attitude),radToDeg(heading),  radToDeg(bank)];
-	// 	}
-	//     var heading = Math.atan2(2*someQuat.y*someQuat.w-2*someQuat.x*someQuat.z , sqx - sqy - sqz + sqw);
-	// 	var attitude = Math.asin(2*test/unit);
-	// 	var bank = Math.atan2(2*someQuat.x*someQuat.w-2*someQuat.y*someQuat.z , -sqx + sqy - sqz + sqw)
-
-	// 	return [radToDeg(bank), radToDeg(heading), radToDeg(attitude)];
-	// }
-
-	function toEuler(x, y, z, angle) {
-		var s=Math.sin(angle);
-		var c=Math.cos(angle);
-		var t=1-c;
-
-		//  if axis is not already normalised then uncomment this
-		var magnitude = Math.sqrt(x*x + y*y + z*z);
-		if (magnitude === 0) alert(1);
-		x /= magnitude;
-		y /= magnitude;
-		z /= magnitude;
-
-		var heading, bank, attitude;
-
-		if ((x*y*t + z*s) > 0.998) { // north pole singularity detected
-			heading = 2*Math.atan2(x*Math.sin(angle/2),Math.cos(angle/2));
-			attitude = Math.PI/2;
-			bank = 0;
-		}
-		else if ((x*y*t + z*s) < -0.998) { // south pole singularity detected
-			heading = -2*Math.atan2(x*Math.sin(angle/2),Math.cos(angle/2));
-			attitude = -Math.PI/2;
-			bank = 0;
-		}
-		else {
-			heading = Math.atan2(y * s- x * z * t , 1 - (y*y+ z*z ) * t);
-			attitude = Math.asin(x * y * t + z * s) ;
-			bank = Math.atan2(x * s - y * z * t , 1 - (x*x + z*z) * t);
-		}
-
-		// return [radToDeg(heading), radToDeg(attitude), radToDeg(bank)];
-		// return [radToDeg(heading), radToDeg(bank), radToDeg(attitude)];
-		// return [-radToDeg(attitude), -radToDeg(heading), -radToDeg(bank)];
-		// return [radToDeg(attitude), radToDeg(bank), radToDeg(heading)];
-		// return [radToDeg(bank), radToDeg(attitude), radToDeg(heading)];
-		return [-radToDeg(bank), -radToDeg(heading), radToDeg(attitude)];
-	}
-
-	/**
-	This requires a pure rotation matrix 'm' as input.
-	*/
-	function toAxisAngle(m) {
-		m = [[m[0],m[1],m[2]],[m[4],m[5],m[6]],[m[8],m[9],m[10]]];
-		var angle,x,y,z; // variables for result
-		var epsilon = 0.01; // margin to allow for rounding errors
-		var epsilon2 = 0.1; // margin to distinguish between 0 and 180 degrees
-		// optional check that input is pure rotation, 'isRotationMatrix' is defined at:
-		// http://www.euclideanspace.com/maths/algebra/matrix/orthogonal/rotation/
-		
-		if ((Math.abs(m[0][1]-m[1][0]) < epsilon)
-		  && (Math.abs(m[0][2]-m[2][0]) < epsilon)
-		  && (Math.abs(m[1][2]-m[2][1]) < epsilon)) {
-			// singularity found
-			// first check for identity matrix which must have +1 for all terms
-			//  in leading diagonaland zero in other terms
-			if ((Math.abs(m[0][1]+m[1][0]) < epsilon2)
-			  && (Math.abs(m[0][2]+m[2][0]) < epsilon2)
-			  && (Math.abs(m[1][2]+m[2][1]) < epsilon2)
-			  && (Math.abs(m[0][0]+m[1][1]+m[2][2]-3) < epsilon2)) {
-				// this singularity is identity matrix so angle = 0
-				return toEuler(1,0,0,0); // zero angle, arbitrary axis
-			}
-			// otherwise this singularity is angle = 180
-			angle = Math.PI;
-			var xx = (m[0][0]+1)/2;
-			var yy = (m[1][1]+1)/2;
-			var zz = (m[2][2]+1)/2;
-			var xy = (m[0][1]+m[1][0])/4;
-			var xz = (m[0][2]+m[2][0])/4;
-			var yz = (m[1][2]+m[2][1])/4;
-			if ((xx > yy) && (xx > zz)) { // m[0][0] is the largest diagonal term
-				if (xx< epsilon) {
-					x = 0;
-					y = 0.7071;
-					z = 0.7071;
-				} else {
-					x = Math.sqrt(xx);
-					y = xy/x;
-					z = xz/x;
-				}
-			} else if (yy > zz) { // m[1][1] is the largest diagonal term
-				if (yy< epsilon) {
-					x = 0.7071;
-					y = 0;
-					z = 0.7071;
-				} else {
-					y = Math.sqrt(yy);
-					x = xy/y;
-					z = yz/y;
-				}	
-			} else { // m[2][2] is the largest diagonal term so base result on this
-				if (zz< epsilon) {
-					x = 0.7071;
-					y = 0.7071;
-					z = 0;
-				} else {
-					z = Math.sqrt(zz);
-					x = xz/z;
-					y = yz/z;
-				}
-			}
-			return toEuler(x,y,z,angle); // return 180 deg rotation
-		}
-		// as we have reached here there are no singularities so we can handle normally
-		var s = Math.sqrt((m[2][1] - m[1][2])*(m[2][1] - m[1][2])
-			+(m[0][2] - m[2][0])*(m[0][2] - m[2][0])
-			+(m[1][0] - m[0][1])*(m[1][0] - m[0][1])); // used to normalise
-		if (Math.abs(s) < 0.001) s=1; 
-			// prevent divide by zero, should not happen if matrix is orthogonal and should be
-			// caught by singularity test above, but I've left it in just in case
-		angle = Math.acos(( m[0][0] + m[1][1] + m[2][2] - 1)/2);
-		x = (m[2][1] - m[1][2])/s;
-		y = (m[0][2] - m[2][0])/s;
-		z = (m[1][0] - m[0][1])/s;
-	   return toEuler(x,y,z,angle);
-	}
 
 	function rotate3dAngles(xa1, ya1, za1, xa2, ya2, za2) {
 		var angleMat = mat4.create();
@@ -704,14 +564,7 @@ var chickpea = function() {
 		var angleY = Math.atan2(-angleMat[8], Math.sqrt(angleMat[9]*angleMat[9] + angleMat[10]*angleMat[10]));
 		var angleZ = Math.atan2(angleMat[4], angleMat[0]);
 
-		// return toAxisAngle(angleMat);
 
-		// alert(JSON.stringify([-radToDeg(angleX), -radToDeg(angleY), -radToDeg(angleZ)]))
-
-		// // alert(Math.sign(za1+za2))
-		// // angleX = -degToRad(xa1+xa2);
-		// // angleY = -degToRad(ya1+ya2);
-		// // angleZ = -degToRad(za1+za2);
 		return [-radToDeg(angleX), -radToDeg(angleY), -radToDeg(angleZ)];
 	}
 
@@ -736,15 +589,13 @@ var chickpea = function() {
 	}
 
 	function rotateAxisAngles(xa1,ya1,za1, a1, xa2,ya2,za2, a2) {
-		var s = Math.sin(degToRad(a1)*0.5);
-		var quat1 = quat4.create([xa1*s, ya1*s, za1*s, Math.cos(degToRad(a1)*0.5)]);
+		var quat1 = getQuatFromAxisAngle(xa1,ya1,za1, a1);
 
-		s = Math.sin(degToRad(a2)*0.5);
-		var quat2 = quat4.create([xa2*s, ya2*s, za2*s, Math.cos(degToRad(a2)*0.5)]);
+		var quat2 = getQuatFromAxisAngle(xa2,ya2,za2, a2);
 
 		quat4.multiply(quat2, quat1, quat2);
-		// quat4.inverse(quat2)
-		// alert(JSON.stringify(quat) + " " + s)
+
+
 		return getAxisAngleFromQuat(quat2);
 	}
 
