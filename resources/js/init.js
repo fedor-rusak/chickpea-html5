@@ -47,7 +47,7 @@ function init(userScriptFunctions, natives) {
 
 
 	var startData = [
-		// {"function": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
+		{"function": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
 		{"function": "setCamera", "x": 0, "y": 0, "z": 10},
 		{"function": "enableDepthTesting"},
 		{"function": "disableAlphaBlending"},
@@ -224,10 +224,10 @@ function init(userScriptFunctions, natives) {
 	};
 
 
-	state.delta = 270;
-	state.testAngle = 270;
-	state.angle = 0;
-	state.step = 0.5;
+	state.delta = 90;
+	state.testAngle = 0;
+	state.angle = state.testAngle - state.delta;
+	state.step = 2.5;
 	state.sign = +1;
 	state.radius = 1.5;
 
@@ -248,55 +248,37 @@ function init(userScriptFunctions, natives) {
 			10, 1,1,1, -state.angle);
 
 
+
 		natives.setCamera(
 			newCameraPosition[0],
 			newCameraPosition[1],
 			newCameraPosition[2],
 			1,1,1, state.angle);
 
-		natives.enableAlphaBlending()
-		natives.clearScreen(0.1, 0.2, 0.3);
+		//for debug
+		newCameraPosition = [0,0,10];
 
 
-		var input = [
-			"explosion", {"x": 1, "y": 0, "z": 0, "xa": 0, "ya": 1, "za": 0, "a": 90},
-			"wireframe", {"x": -1, "y": 0, "z": 0, "xa": 0, "ya": -0.1, "za": 0, "a": 90},
-			"explosion", {"x": 0, "y": 1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
-			"wireframe", {"x": 0, "y": -1, "z": 0, "xa": 1, "ya": 0, "za": 0, "a": 90},
-			"explosion", {"x": 0, "y": 0, "z": -1, "xa": 0, "ya": 0, "za": 0, "a": 0},
-			"wireframe", {"x": 0, "y": 0, "z": 1, "xa": 0, "ya": 0, "za": 0, "a": 0}
-		];
 
-		var baseTransformations = {"x": 0, "y": 0, "z": 0, "xa": 1, "ya": 1, "za": 1, "a": state.angle};
-
-		for (var i = 0; i < 6; i++) {
-			var transformations = combineTransformations(input[i*2+1], baseTransformations);
-			natives.renderTexturedSquare(
-				input[i*2],
-				transformations.x,
-				transformations.y,
-				transformations.z,
-				transformations.xa,
-				transformations.ya,
-				transformations.za,
-				transformations.a);
-		}
-
-
-		var cameraNode = startData[0];
+		var cameraNode = startData[1];
 		cameraNode.x = newCameraPosition[0];
 		cameraNode.y = newCameraPosition[1];
 		cameraNode.z = newCameraPosition[2];
-		cameraNode.xa = 1;
-		cameraNode.ya = 1;
-		cameraNode.za = 1;
-		cameraNode.a = state.angle;
+		// cameraNode.xa = 1;
+		// cameraNode.ya = 1;
+		// cameraNode.za = 1;
+		// cameraNode.a = state.angle;
 
-		var worldRotateNode = startData[3];
-		worldRotateNode.xa = 1;
-		worldRotateNode.ya = -1;
-		worldRotateNode.za = 1;
-		worldRotateNode.a = -state.angle;
+		var worldRotateNode = startData[4];
+		// worldRotateNode.xa = 1;
+		// worldRotateNode.ya = -1;
+		// worldRotateNode.za = 1;
+		// worldRotateNode.a = state.angle;
+
+		var coloredLitPolygonsNode = startData[7];
+
+		coloredLitPolygonsNode.lightX = state.angle;
+		coloredLitPolygonsNode.lightZ = 5;
 
 		renderHelper(startData);
 	}

@@ -574,8 +574,18 @@ var chickpea = function() {
 		x,y,z, xa,ya,za, a, r,g,b,alpha,
 		normals, lightX, lightY, lightZ) {
 
-		for (var j = 0; j < vertices.length/3; j++) {
-			var tempVertex = rotate3d(vertices[j*3], vertices[j*3+1], vertices[j*3+2], xa, ya, za, a);
+		for (var i = 0; i < vertices.length/3; i++) {
+			if (normals) {
+				if (sideEffectObject.vertexNormals === undefined) sideEffectObject.vertexNormals = [];
+
+				var normalVector = rotate3d(normals[i*3], normals[i*3+1], normals[i*3+2], xa, ya, za, a);
+
+				sideEffectObject.vertexNormals.push(normalVector[0]);
+				sideEffectObject.vertexNormals.push(normalVector[1]);
+				sideEffectObject.vertexNormals.push(normalVector[2]);
+			}
+
+			var tempVertex = rotate3d(vertices[i*3], vertices[i*3+1], vertices[i*3+2], xa, ya, za, a);
 
 			tempVertex = translate(tempVertex, x,y,z);
 
@@ -584,8 +594,8 @@ var chickpea = function() {
 			sideEffectObject.vertices.push(tempVertex[2]);
 
 			if (textureCoords) {
-				sideEffectObject.textureCoords.push(textureCoords[j*2]);
-				sideEffectObject.textureCoords.push(textureCoords[j*2+1]);
+				sideEffectObject.textureCoords.push(textureCoords[i*2]);
+				sideEffectObject.textureCoords.push(textureCoords[i*2+1]);
 			}
 
 			if (r || r === 0) {
@@ -600,14 +610,8 @@ var chickpea = function() {
 			sideEffectObject.textureLabel = textureLabel;
 
 		var vertexCount = (sideEffectObject.vertices.length - vertices.length)/3;
-		for (var j = 0; j < indices.length; j++) {
-			sideEffectObject.indices.push(indices[j]+vertexCount);
-		}
-
-		if (normals) {
-			for (var j = 0; j < normals.length; j++) {
-				sideEffectObject.vertexNormals.push(normals[j]);
-			}
+		for (var i = 0; i < indices.length; i++) {
+			sideEffectObject.indices.push(indices[i]+vertexCount);
 		}
 
 		if (lightX || lightX === 0)
