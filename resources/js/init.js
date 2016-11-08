@@ -47,58 +47,62 @@ function init(userScriptFunctions, natives) {
 
 
 	var startData = [
-		{"function": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
-		{"function": "setCamera", "x": 0, "y": 0, "z": 10},
-		{"function": "enableDepthTesting"},
-		{"function": "disableAlphaBlending"},
-		{"function": "rotate", "xa": 0, "ya": 0, "za": 0, "a": 0},
-		{"function": "translate", "x": 0, "y": 0, "z": 0},
+		{"do": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
+		{"do": "setCamera", "x": 0, "y": 0, "z": 10},
+		{"do": "enableDepthTesting"},
+		{"do": "disableAlphaBlending"},
+		{"do": "rotate", "xa": 0, "ya": 0, "za": 0, "a": 0},
+		{"do": "translate", "x": 0, "y": 0, "z": 0},
 		[
-			{"function": "rotate", "xa": 0, "ya": 1, "za": 0, "a": 90},
+			{"do": "rotate", "xa": 0, "ya": 1, "za": 0, "a": 90},
 			{
-				"function": "renderOneColoredPolygons",
+				"do": "renderOneColoredPolygons",
 				"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 				"indices": [0,1,2, 3,0,2],
 				"r": 0.1, "g": 0.7, "b": 0.2, "alpha": 0.5
 			}
 		],
 		{
-			"function": "renderOneColoredLitPolygons",
+			"do": "renderOneColoredLitPolygons",
 			"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
 			"indices": [0,1,2, 3,0,2],
 			"normals": [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1,-1,-1,1,1,1,1], //circly normals
-			// [0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1], //squary normals
+			// "normals": [0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1], //squary normals
 			"lightX":0, "lightY": 0, "lightZ": 5,
 			"r": 1, "g": 0, "b": 0, "alpha": 1
 		},
-		{"function": "enableAlphaBlending"},
+		{"do": "enableAlphaBlending"},
 		[
-			{"function": "translate", "x": -1, "z": 0},
-			{"function": "rotate", "xa": 0, "ya": -1, "za": 0, "a": 90},
-			{"function": "renderTexturedSquare", "textureLabel": "wireframe"}
+			{"do": "scale", "yScale": 2},
+			{"do": "translate", "x": -1},
+			{"do": "rotate", "ya": -1, "a": 90},
+			{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
 		],
 		[
-			{"function": "translate", "x": 1, "z": 0},
-			{"function": "rotate", "xa": 0, "ya": 1, "za": 0, "a": 90},
-			{"function": "renderTexturedSquare", "textureLabel": "explosion"}
+			{"do": "scale", "yScale": 2},
+			{"do": "translate", "x": 1},
+			{"do": "rotate", "ya": 1, "a": 90},
+			{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
 		],
 		[
-			{"function": "translate", "x": 0, "y": -1, "z": 0},
-			{"function": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
-			{"function": "renderTexturedSquare", "textureLabel": "wireframe"}
+			{"do": "translate", "x": 0, "y": -2, "z": 0},
+			{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
+			{"do": "renderTexturedSquare", "textureLabel": "wireframe"}
 		],
 		[
-			{"function": "translate", "x": 0, "y": 1, "z": 0},
-			{"function": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
-			{"function": "renderTexturedSquare", "textureLabel": "explosion"}
+			{"do": "translate", "x": 0, "y": 2, "z": 0},
+			{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
+			{"do": "renderTexturedSquare", "textureLabel": "explosion"}
 		],
 		[
-			{"function": "translate", "x": 0, "y": 0, "z": 1},
-			{"function": "renderTexturedSquare", "textureLabel": "wireframe"}
+			{"do": "scale", "yScale": 2},
+			{"do": "translate", "z": 1},
+			{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
 		],
 		[
-			{"function": "translate", "x": 0, "y": 0, "z": -1},
-			{"function": "renderTexturedSquare", "textureLabel": "explosion"}
+			{"do": "scale", "yScale": 2},
+			{"do": "translate", "x": 0, "y": 0, "z": -1},
+			{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
 		]
 	];
 
@@ -106,7 +110,7 @@ function init(userScriptFunctions, natives) {
 	var combineTransformations = function(current, propagated, destination) {
 		var result = destination || {};
 
-		var itemNameArray = ["x", "y", "z", "xa", "ya", "za", "a"];
+		var itemNameArray = ["xScale", "yScale", "zScale", "x", "y", "z", "xa", "ya", "za", "a"];
 
 		for (var i = 0; i < itemNameArray.length; i++) {
 			var itemName = itemNameArray[i];
@@ -134,11 +138,16 @@ function init(userScriptFunctions, natives) {
 		result.z += tempPoint[2];
 
 
+		result.xScale *= current.xScale || 1;
+		result.yScale *= current.yScale || 1;
+		result.zScale *= current.zScale || 1;
+
+
 		return result;
 	}
 
 	function getDefaultTransformations() {
-		return {"x": 0, "y": 0, "z": 0, "xa": 0, "ya": 0, "za": 0, "a": 0};
+		return {"xScale":1, "yScale":1, "zScale": 1, "x": 0, "y": 0, "z": 0, "xa": 0, "ya": 0, "za": 0, "a": 0};
 	}
 
 	var renderHelper = function(serializedCommands, propagatedTransformations) {
@@ -156,23 +165,23 @@ function init(userScriptFunctions, natives) {
 				var some = combineTransformations(currentTransformations, propagatedTransformations);
 				renderHelper(block, some);
 			}
-			else if (block.function === "clearScreen") {
+			else if (block.do === "clearScreen") {
 				natives.clearScreen(block.r, block.g, block.b);
 			}
-			else if (block.function === "setCamera") {
+			else if (block.do === "setCamera") {
 				natives.setCamera(block.x || 0, block.y || 0, block.z || 0,
 				block.xa || 0, block.ya || 0, block.za || 0, block.a || 0);
 			}
-			else if (block.function === "enableDepthTesting") {
+			else if (block.do === "enableDepthTesting") {
 				natives.enableDepthTesting();
 			}
-			else if (block.function === "enableAlphaBlending") {
+			else if (block.do === "enableAlphaBlending") {
 				natives.enableAlphaBlending();
 			}
-			else if (block.function === "disableAlphaBlending") {
+			else if (block.do === "disableAlphaBlending") {
 				natives.disableAlphaBlending();
 			}
-			else if (block.function === "renderOneColoredPolygons") {
+			else if (block.do === "renderOneColoredPolygons") {
 				var transformations = combineTransformations(currentTransformations, propagatedTransformations);
 
 				natives.renderOneColoredPolygons(
@@ -187,7 +196,7 @@ function init(userScriptFunctions, natives) {
 					transformations.za,
 					transformations.a);
 			}
-			else if (block.function === "renderOneColoredLitPolygons") {
+			else if (block.do === "renderOneColoredLitPolygons") {
 				var transformations = combineTransformations(currentTransformations, propagatedTransformations);
 
 				natives.renderOneColoredLitPolygons(
@@ -204,7 +213,7 @@ function init(userScriptFunctions, natives) {
 					transformations.za,
 					transformations.a);
 			}
-			else if (block.function === "renderTexturedSquare") {
+			else if (block.do === "renderTexturedSquare") {
 				var transformations = combineTransformations(currentTransformations, propagatedTransformations);
 
 				natives.renderTexturedSquare(
@@ -217,7 +226,23 @@ function init(userScriptFunctions, natives) {
 					transformations.za,
 					transformations.a);
 			}
-			else if (block.function === "translate" || block.function === "rotate") {
+			else if (block.do === "renderScaledTexturedSquare") {
+				var transformations = combineTransformations(currentTransformations, propagatedTransformations);
+
+				natives.renderScaledTexturedSquare(
+					block.textureLabel,
+					transformations.xScale,
+					transformations.yScale,
+					transformations.zScale,
+					transformations.x,
+					transformations.y,
+					transformations.z,
+					transformations.xa,
+					transformations.ya,
+					transformations.za,
+					transformations.a);
+			}
+			else if (block.do === "translate" || block.do === "rotate" || block.do ===  "scale") {
 				combineTransformations(block, currentTransformations, currentTransformations);
 			}
 		};
@@ -227,9 +252,9 @@ function init(userScriptFunctions, natives) {
 	state.delta = 90;
 	state.testAngle = 0;
 	state.angle = state.testAngle - state.delta;
-	state.step = 2.5;
+	state.step = 0.5;
 	state.sign = +1;
-	state.radius = 1.5;
+	state.radius = 0;
 
 	userScriptFunctions.render = function() {
 		var radians = state.angle*Math.PI/180;
@@ -256,7 +281,7 @@ function init(userScriptFunctions, natives) {
 			1,1,1, state.angle);
 
 		//for debug
-		newCameraPosition = [0,0,10];
+		// newCameraPosition = [0,0,10];
 
 
 
@@ -264,16 +289,16 @@ function init(userScriptFunctions, natives) {
 		cameraNode.x = newCameraPosition[0];
 		cameraNode.y = newCameraPosition[1];
 		cameraNode.z = newCameraPosition[2];
-		// cameraNode.xa = 1;
-		// cameraNode.ya = 1;
-		// cameraNode.za = 1;
-		// cameraNode.a = state.angle;
+		cameraNode.xa = 1;
+		cameraNode.ya = 1;
+		cameraNode.za = 1;
+		cameraNode.a = state.angle;
 
 		var worldRotateNode = startData[4];
-		// worldRotateNode.xa = 1;
-		// worldRotateNode.ya = -1;
-		// worldRotateNode.za = 1;
-		// worldRotateNode.a = state.angle;
+		worldRotateNode.xa = 1;
+		worldRotateNode.ya = -1;
+		worldRotateNode.za = 1;
+		worldRotateNode.a = state.angle;
 
 		var coloredLitPolygonsNode = startData[7];
 

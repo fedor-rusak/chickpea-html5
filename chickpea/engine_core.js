@@ -46,6 +46,7 @@
 	 * enableDepthTesting (enable WebGL feature that makes drawing order dependent on coordinates)
 	 * disableDepthTesting (enable WebGL feature that makes drawing order dependent on draw call order)
 	 * renderTexturedSquare (draw square with specified texture with specified coordinate transformations)
+	 * renderScaledTexturedSquare (draw square with specified texture with specified coordinate transformations including scaling)
 	 * renderOneColoredPolygons (draw polygons using vertices, indices, rgba color, xyz coordinates and axis angle)
 	 * renderOneColoredLitPolygons (like ColoredPolygons but includes normals and light source position WORK IN PROGRESS)
 	 * rotate3d (helper for rotating vector with axis angle)
@@ -370,7 +371,7 @@ var chickpea = function() {
 		var program,
 			renderingType = gl.TRIANGLES;
 
-		if (tag === "texturedPolygons") {
+		if (tag === "texturedPolygons" || tag === "scaledTexturedPolygons") {
 			program = webgl.programs.texture;
 
 			if (modelData.textureLabel === "wireframe") {
@@ -571,7 +572,8 @@ var chickpea = function() {
 
 	function prepareData(
 		sideEffectObject, vertices, indices, textureCoords, textureLabel,
-		x,y,z, xa,ya,za, a, r,g,b,alpha,
+		xScale, yScale, zScale, x,y,z, xa,ya,za, a,
+		r,g,b,alpha,
 		normals, lightX, lightY, lightZ) {
 
 		for (var i = 0; i < vertices.length/3; i++) {
@@ -585,7 +587,7 @@ var chickpea = function() {
 				sideEffectObject.vertexNormals.push(normalVector[2]);
 			}
 
-			var tempVertex = rotate3d(vertices[i*3], vertices[i*3+1], vertices[i*3+2], xa, ya, za, a);
+			var tempVertex = rotate3d(vertices[i*3]*xScale, vertices[i*3+1]*yScale, vertices[i*3+2]*zScale, xa, ya, za, a);
 
 			tempVertex = translate(tempVertex, x,y,z);
 
@@ -627,28 +629,31 @@ var chickpea = function() {
 
 			var vertices = drawCommand[0],
 				indices = drawCommand[1],
-				x = drawCommand[2] || 0,
-				y = drawCommand[3] || 0,
-				z = drawCommand[4] || 0,
-				xa = drawCommand[5],
-				ya = drawCommand[6],
-				za = drawCommand[7],
-				a = drawCommand[8],
-				textureCoords = drawCommand[9],
-				textureLabel = drawCommand[10],
-				r = drawCommand[11],
-				g = drawCommand[12],
-				b = drawCommand[13],
-				alpha = drawCommand[14],
-				normals = drawCommand[15],
-				lightX = drawCommand[16],
-				lightY = drawCommand[17],
-				lightZ = drawCommand[18];
+				xScale = drawCommand[2] || 1,
+				yScale = drawCommand[3] || 1,
+				zScale = drawCommand[4] || 1,
+				x = drawCommand[5] || 0,
+				y = drawCommand[6] || 0,
+				z = drawCommand[7] || 0,
+				xa = drawCommand[8],
+				ya = drawCommand[9],
+				za = drawCommand[10],
+				a = drawCommand[11],
+				textureCoords = drawCommand[12],
+				textureLabel = drawCommand[13],
+				r = drawCommand[14],
+				g = drawCommand[15],
+				b = drawCommand[16],
+				alpha = drawCommand[17],
+				normals = drawCommand[18],
+				lightX = drawCommand[19],
+				lightY = drawCommand[20],
+				lightZ = drawCommand[21];
 
 			prepareData(
 				modelData,
 				vertices, indices, textureCoords, textureLabel,
-				x,y,z, xa,ya,za, a,
+				xScale, yScale, zScale, x,y,z, xa,ya,za, a,
 				r,g,b,alpha,
 				normals, lightX, lightY, lightZ);
 		}
@@ -755,6 +760,7 @@ var chickpea = function() {
 			webgl.gl.disable(webgl.gl.DEPTH_TEST);
 		}
 		else if (tag === "texturedPolygons"
+				|| tag === "scaledTexturedPolygons"
 				|| tag === "coloredPolygons"
 				|| tag === "coloredLitPolygons") {
 			var modelData = prepareAllData(data);
@@ -775,8 +781,8 @@ var chickpea = function() {
 				drawCommand = internalData.drawQueue[i].data;
 
 			var identifier = tag;
-			if (tag === "texturedPolygons")
-				identifier += drawCommand[10]; //textureLabel
+			if (tag === "texturedPolygons" || tag === "scaledTexturedPolygons")
+				identifier += drawCommand[13]; //textureLabel
 
 			if (oldIdentifier === null) {
 				temp.push(drawCommand);
@@ -860,7 +866,19 @@ var chickpea = function() {
 				internalData.drawQueue.push({
 					"tag":"texturedPolygons",
 					"data":[
-						squareData.vertices, squareData.indices, x,y,z, xa,ya,za,a,
+						squareData.vertices, squareData.indices,
+						null, null, null, x,y,z, xa,ya,za,a,
+						squareData.textureCoords, label
+					]
+				});
+			},
+			"renderScaledTexturedSquare": function(label, xScale, yScale, zScale, x,y,z, xa,ya,za,a) {
+				var squareData = generateSquareModelData();
+				internalData.drawQueue.push({
+					"tag":"texturedPolygons",
+					"data":[
+						squareData.vertices, squareData.indices,
+						xScale, yScale, zScale, x,y,z, xa,ya,za,a,
 						squareData.textureCoords, label
 					]
 				});
@@ -869,7 +887,8 @@ var chickpea = function() {
 				internalData.drawQueue.push({
 					"tag":"coloredPolygons",
 					"data":[
-						vertices, indices, x,y,z, xa,ya,za,a,
+						vertices, indices,
+						null, null, null, x,y,z, xa,ya,za,a,
 						null,null, r,g,b,alpha
 					]
 				});
@@ -878,7 +897,8 @@ var chickpea = function() {
 				internalData.drawQueue.push({
 					"tag":"coloredLitPolygons",
 					"data":[
-						vertices, indices, x,y,z, xa,ya,za,a,
+						vertices, indices,
+						null, null, null, x,y,z, xa,ya,za,a,
 						null,null, r,g,b,alpha, normals, lX,lY,lZ
 					]
 				});
