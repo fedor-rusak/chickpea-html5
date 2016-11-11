@@ -19,23 +19,37 @@ function init(userScriptFunctions, natives) {
 		state.inputDataArray.push(data);
 	}
 
+	state.keysPressed = {};
+	state.inputs = {};
+
 	userScriptFunctions.processInput = function() {
 		var inputDataArray = state.inputDataArray;
 
 		if (inputDataArray.length != 0) {
-			console.log("inputData length = " + inputDataArray.length + ", content:");
-			for (var i = 0; i < inputDataArray.length; i++) {
-				console.log(JSON.stringify(inputDataArray[i]));
-				if (inputDataArray[i][0] === "pressed") {
-					console.log(natives.unproject(inputDataArray[i][2], inputDataArray[i][3]));
-				}
 
-				if (inputDataArray[i][0] !== "release") {
-					console.log(natives.unproject(inputDataArray[i][2], inputDataArray[i][3]));
-					if (inputDataArray[i][2] < 500 && !state.soundPlayed) {
+			for (var i = 0; i < inputDataArray.length; i++) {
+				var inputEvent = inputDataArray[i];
+
+				if (inputEvent[0] === "pressed") {
+					if (state.inputs[inputEvent[1]] === undefined)
+						state.inputs[inputEvent[1]] = {};
+
+					state.inputs[inputEvent[1]].x = inputEvent[2];
+					state.inputs[inputEvent[1]].y = inputEvent[3];
+				}
+				else if (inputEvent[0] === "release") {
+					if (state.inputs[inputEvent[1]].x < 500 && !state.soundPlayed) {
 						state.soundPlayed = true;
 						natives.playSound();
 					}
+
+					state.inputs[inputEvent[1]] = undefined;
+				}
+				else if (inputEvent[0] === "keyDown") {
+					state.keysPressed[inputEvent[1]] = true;
+				}
+				else if (inputEvent[0] === "keyUp") {
+					state.keysPressed[inputEvent[1]] = false;
 				}
 			}
 
@@ -255,6 +269,9 @@ function init(userScriptFunctions, natives) {
 	state.step = 0.5;
 	state.sign = +1;
 	state.radius = 0;
+	state.posX = 0;
+	state.posZ = 10;
+	state.speed = 0.1;
 
 	userScriptFunctions.render = function() {
 		var radians = state.angle*Math.PI/180;
@@ -267,18 +284,29 @@ function init(userScriptFunctions, natives) {
 			state.sign *=-1;
 		}
 
-		var newCameraPosition = natives.rotate3d(
-			Math.sin(radians)*state.radius,
-			Math.cos(radians)*state.radius,
-			10, 1,1,1, -state.angle);
+		// var newCameraPosition = natives.rotate3d(
+		// 	Math.sin(radians)*state.radius,
+		// 	Math.cos(radians)*state.radius,
+		// 	10, 1,1,1, -state.angle);
 
+		if (state.keysPressed["ArrowLeft"])
+			state.posX -= state.speed;
+		if (state.keysPressed["ArrowRight"])
+			state.posX += state.speed;
+
+		if (state.keysPressed["ArrowUp"])
+			state.posZ -= state.speed;
+		if (state.keysPressed["ArrowDown"])
+			state.posZ += state.speed;
+
+		var newCameraPosition = [state.posX, 0, state.posZ];
 
 
 		natives.setCamera(
 			newCameraPosition[0],
 			newCameraPosition[1],
 			newCameraPosition[2],
-			1,1,1, state.angle);
+			1,0,0, 90);
 
 		//for debug
 		// newCameraPosition = [0,0,10];
@@ -289,10 +317,10 @@ function init(userScriptFunctions, natives) {
 		cameraNode.x = newCameraPosition[0];
 		cameraNode.y = newCameraPosition[1];
 		cameraNode.z = newCameraPosition[2];
-		cameraNode.xa = 1;
-		cameraNode.ya = 1;
-		cameraNode.za = 1;
-		cameraNode.a = state.angle;
+		// cameraNode.xa = 1;
+		// cameraNode.ya = 1;
+		// cameraNode.za = 1;
+		// cameraNode.a = state.angle;
 
 		var worldRotateNode = startData[4];
 		worldRotateNode.xa = 1;

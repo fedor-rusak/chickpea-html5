@@ -1070,6 +1070,29 @@ var chickpea = function() {
 			internalData.mousePressed = undefined;
 		};
 
+		function transformKeyCode(keyCode) {
+			var result = keyCode;
+
+			if (keyCode === 37)
+				result = "ArrowLeft";
+			if (keyCode === 38)
+				result = "ArrowUp";
+			else if (keyCode === 39)
+				result = "ArrowRight";
+			else if (keyCode === 40)
+				result = "ArrowDown";
+
+			return result;
+		}
+
+		window.onkeydown = function(e) {
+			userScriptFunctions.addInput(["keyDown", transformKeyCode(e.keyCode)]);
+		};
+
+		window.onkeyup = function(e) {
+			userScriptFunctions.addInput(["keyUp", transformKeyCode(e.keyCode)]);
+		}
+
 
 		var gameLoopCycle = function() {
 			userScriptFunctions.processInput();
