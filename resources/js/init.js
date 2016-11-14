@@ -269,9 +269,14 @@ function init(userScriptFunctions, natives) {
 	state.step = 0.5;
 	state.sign = +1;
 	state.radius = 0;
+
 	state.posX = 0;
 	state.posZ = 10;
 	state.speed = 0.1;
+
+	state.sense = 0.75
+	state.xAxisRotate = 0;
+	state.yAxisRotate = 0;
 
 	userScriptFunctions.render = function() {
 		var radians = state.angle*Math.PI/180;
@@ -289,24 +294,55 @@ function init(userScriptFunctions, natives) {
 		// 	Math.cos(radians)*state.radius,
 		// 	10, 1,1,1, -state.angle);
 
+		var newCameraPosition = [0,0,0];
+
+		if (state.keysPressed["a"])
+			newCameraPosition[0] = -state.speed;
+		if (state.keysPressed["d"])
+			newCameraPosition[0] = state.speed;
+
+		if (state.keysPressed["w"])
+			newCameraPosition[2] = -state.speed;
+		if (state.keysPressed["s"])
+			newCameraPosition[2] = state.speed;
+
+
 		if (state.keysPressed["ArrowLeft"])
-			state.posX -= state.speed;
+			state.yAxisRotate -= state.sense;
 		if (state.keysPressed["ArrowRight"])
-			state.posX += state.speed;
+			state.yAxisRotate += state.sense;
 
 		if (state.keysPressed["ArrowUp"])
-			state.posZ -= state.speed;
+			state.xAxisRotate -= state.sense;
 		if (state.keysPressed["ArrowDown"])
-			state.posZ += state.speed;
-
-		var newCameraPosition = [state.posX, 0, state.posZ];
+			state.xAxisRotate += state.sense;
 
 
-		natives.setCamera(
+		if (state.xAxisRotate > 90) state.xAxisRotate = 90;
+		else if (state.xAxisRotate < -90) state.xAxisRotate = -90;
+
+		var cameraAxisAngle = natives.rotateAxisAngles(1,0,0, state.xAxisRotate, 0,1,0, state.yAxisRotate);
+
+
+		newCameraPosition = natives.rotate3d(
 			newCameraPosition[0],
 			newCameraPosition[1],
 			newCameraPosition[2],
-			1,0,0, 90);
+			0,1,0, -state.yAxisRotate);
+
+		state.posX += newCameraPosition[0];
+		state.posZ += newCameraPosition[2];
+
+
+		newCameraPosition = [state.posX, 0, state.posZ];
+
+
+
+		// natives.setCamera(
+		// 	newCameraPosition[0],
+		// 	newCameraPosition[1],
+		// 	newCameraPosition[2],
+		// 	1,0,0, 90);
 
 		//for debug
 		// newCameraPosition = [0,0,10];
@@ -317,10 +353,10 @@ function init(userScriptFunctions, natives) {
 		cameraNode.x = newCameraPosition[0];
 		cameraNode.y = newCameraPosition[1];
 		cameraNode.z = newCameraPosition[2];
-		// cameraNode.xa = 1;
-		// cameraNode.ya = 1;
-		// cameraNode.za = 1;
-		// cameraNode.a = state.angle;
+		cameraNode.xa = cameraAxisAngle[0];
+		cameraNode.ya = cameraAxisAngle[1];
+		cameraNode.za = cameraAxisAngle[2];
+		cameraNode.a = cameraAxisAngle[3];
 
 		var worldRotateNode = startData[4];
 		worldRotateNode.xa = 1;

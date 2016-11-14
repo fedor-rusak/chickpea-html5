@@ -1075,12 +1075,20 @@ var chickpea = function() {
 
 			if (keyCode === 37)
 				result = "ArrowLeft";
-			if (keyCode === 38)
+			else if (keyCode === 38)
 				result = "ArrowUp";
 			else if (keyCode === 39)
 				result = "ArrowRight";
 			else if (keyCode === 40)
 				result = "ArrowDown";
+			if (keyCode === 65)
+				result = "a";
+			else if (keyCode === 68)
+				result = "d";
+			else if (keyCode === 83)
+				result = "s";
+			else if (keyCode === 87)
+				result = "w";
 
 			return result;
 		}
