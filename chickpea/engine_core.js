@@ -39,7 +39,8 @@
 	 * playSound
 	 * getScreenDimensions (get size of window shown in runtime)
 	 * setViewport (set dimensions for rendered image)
-	 * setCamera (set position for point of view during rendering)
+	 * setCamera (set position for point of view during rendering with *perspective* geometry)
+	 * setCameraOrtho (set position for point of view during rendering with *orthogonal* geometry)
 	 * clearScreen
 	 * enableAlphaBlending (enable WebGL feature for drawing images with transparency)
 	 * disableAlphaBlending (disable WebGL feature for drawing images with transparency)
@@ -67,18 +68,17 @@
 	Question: Should I just make them one by one or find some optimization?
 	
 	My decision: I want nice FPS like 30 or 60 and I went for optimization. Which means all the
-	engine calls from render function just fill special queue object. That is later analyzed and
-	multiple calls (when posible) can be compressed in one by unification of vertices, indices,
+	engine calls from render function just fill special queue object. Multiple calls (when posible) can be compressed in one by unification of vertices, indices,
 	colors and etc.
 
-	Pros/Cons: More code, yet it was necessary to make features like alpha blending to be dynamic.
+	Pros/Cons: More abstractions, yet adding new command means adding some message and interpreter for it.
 
 
 	Context: Drawing multiple objects with different rotation requires some transformation management.
 
 	Question: Should I try to make a "magical" API or make it more "low-level"?
 	
-	My decision: If I am planning to use API extensively I want it to be as sumb as possible.
+	My decision: If I am planning to use API extensively I want it to be as dumb as possible.
 	So i decided to go for lower-level approach. Let me explain the idea behind orientation and position.
 	Each object in space has one and only one position and orientation. So it is the job of user script
 	to calculate the final one from multiple transformations if they happened. And orientation can
@@ -157,7 +157,7 @@ var chickpea = function() {
 		var gl;
 
 		try {
-			gl = canvas.getContext("experimental-webgl");
+			gl = canvas.getContext("experimental-webgl", {"alpha": false, "premultipliedAlpha": false});
 		}
 		catch (e) {}
 
@@ -337,6 +337,7 @@ var chickpea = function() {
 		var glTexture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, glTexture);
 		// gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		console.log(imageData);
 		gl.texImage2D(gl.TEXTURE_2D, 0, imageFormat, imageFormat, gl.UNSIGNED_BYTE, imageData);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -705,6 +706,10 @@ var chickpea = function() {
 
 	function processGLCommand(tag, webgl, data) {
 		if (tag === "setCamera") {
+			webgl.pMatrix = mat4.create();
+			mat4.perspective(45, webgl.canvas.width / webgl.canvas.height, 0.1, 100.0, webgl.pMatrix);
+
+
 			var dataElement = data[data.length-1];
 
 			var x = dataElement.x,
@@ -723,15 +728,34 @@ var chickpea = function() {
 			mat3.transpose(normalMatrix);
 			webgl.normalMatrix = normalMatrix;
 		}
+		else if (tag === "setCameraOrtho") {
+			webgl.pMatrix = mat4.create();
+			mat4.ortho(
+				-webgl.canvas.width/2, webgl.canvas.width/2,
+				-webgl.canvas.height/2, webgl.canvas.height/2,
+				0.1, 100.0,
+				webgl.pMatrix);
+
+
+			var dataElement = data[data.length-1];
+
+			var x = dataElement.x,
+				y = dataElement.y,
+				z = dataElement.z,
+				xa = dataElement.xa || 0,
+				ya = dataElement.ya || 0,
+				za = dataElement.za || 0,
+				a = dataElement.a || 0;
+
+			webgl.vMatrix = generateViewMatrix(x, y, z, xa, ya, za, a);
+			webgl.unprojectVMatrix = generateViewMatrix(x, -y, z, -xa, ya, za, a);
+		}
 		else if (tag === "setViewport") {
 			var width = data[data.length-1].width,
 				height = data[data.length-1].height;
 
 			webgl.canvas.width = width;
 			webgl.canvas.height = height;
-
-			webgl.pMatrix = mat4.create();
-			mat4.perspective(45, width / height, 0.1, 100.0, webgl.pMatrix);
 
 			webgl.gl.viewport(0, 0, width, height);
 		}
@@ -746,8 +770,8 @@ var chickpea = function() {
 		else if (tag === "enableAlpha") {
 			var gl = webgl.gl;
 			// gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-			// gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+			// gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 			gl.enable(gl.BLEND);
 		}
 		else if (tag === "disableAlpha") {
@@ -844,6 +868,12 @@ var chickpea = function() {
 					"data": {"x": x, "y": y, "z": z, "xa": xa, "ya": ya, "za": za, "a": a}
 				});
 			},
+			"setCameraOrtho": function(x,y,z, xa,ya,za,a) {
+				internalData.drawQueue.push({
+					"tag":"setCameraOrtho",
+					"data": {"x": x, "y": y, "z": z, "xa": xa, "ya": ya, "za": za, "a": a}
+				});
+			},
 			"clearScreen": function(r, g, b) {
 				internalData.drawQueue.push({"tag":"clearScreen", "data": {"r": r, "g": g, "b": b}});
 			},
@@ -902,6 +932,38 @@ var chickpea = function() {
 						null,null, r,g,b,alpha, normals, lX,lY,lZ
 					]
 				});
+			},
+			"renderText": function(text, xScale, yScale, zScale, x,y,z, xa,ya,za,a) {
+				for (var i = 0; i < text.length; i++) {
+					var baseText = "ABCDEFGHIJKLMNOPQRSTUWVXYZabcdefghijklmnopqrstuwvxyz";
+						baseText += "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+						baseText +="0123456789,.!?\"': _()/+-*&^%$#@`~;"
+
+					var charCode = baseText.indexOf(text[i]),
+						symbolsCountSide = 20,
+						letterTextureSideSize = 1/symbolsCountSide, //assume it is a square
+						yStart = Math.floor(charCode/symbolsCountSide) /symbolsCountSide,
+						xStart = charCode % symbolsCountSide /symbolsCountSide;
+
+
+					var squareData = generateSquareModelData();
+
+					squareData.textureCoords = [
+						xStart, yStart+letterTextureSideSize,
+						xStart, yStart,
+						xStart+letterTextureSideSize, yStart+letterTextureSideSize,
+						xStart+letterTextureSideSize, yStart
+					];
+
+					internalData.drawQueue.push({
+						"tag":"texturedPolygons",
+						"data":[
+							squareData.vertices, squareData.indices,
+							xScale, yScale, zScale, x,y,z, xa,ya,za,a,
+							squareData.textureCoords, "text"
+						]
+					});
+				}
 			},
 			"rotate3d": function(x,y,z, xa,ya,za,a) {
 				return rotate3d(x, y, z, xa,ya,za, a);
@@ -1046,9 +1108,9 @@ var chickpea = function() {
 
 		window.onresize = onResizeCallback.bind(null, nativeFunctions.setViewport);
 
-		window.onresize();
+		window.onresize(); //pushes command to a queue
 
-		//to set a correct Viewport dimensions and generate projection matrix
+		//intepret queued command to set correct viewport dimensions
 		processQueuedCommands(internalData);
 
 
@@ -1101,13 +1163,18 @@ var chickpea = function() {
 			userScriptFunctions.addInput(["keyUp", transformKeyCode(e.keyCode)]);
 		}
 
+		userScriptFunctions.callOnceWhenEngineStarts();
 
 		var gameLoopCycle = function() {
+			// var startTime = Date.now();
+
 			userScriptFunctions.processInput();
 
 			userScriptFunctions.render();
 
 			processQueuedCommands(internalData);
+
+			// console.log(Date.now() - startTime);
 
 			window.requestAnimationFrame(gameLoopCycle);
 		}
@@ -1123,7 +1190,7 @@ var chickpea = function() {
 
 
 			var internalData = {
-				"imagesDataArray": [],
+				"imagesDataArray": [{"label": "text", "path": "images/with_alpha/font_open_sans.png"}],
 				"images": {},
 				"soundsDataArray": [],
 				"sounds": {},

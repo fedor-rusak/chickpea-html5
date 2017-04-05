@@ -11,16 +11,111 @@ function init(userScriptFunctions, natives) {
 		natives.cacheSound('action',		'sound/sfx.wav');
 	}
 
-	var state = {
-		inputDataArray: []
-	};
+	var state;
+
+	userScriptFunctions.callOnceWhenEngineStarts = function() {
+		var delta = 90,
+			testAngle = 0;
+
+		state = {
+			"inputDataArray": [],
+			"keysPressed": {},
+			"inputs": {},
+			"delta": delta,
+			"testAngle": testAngle,
+			"angle": testAngle - delta,
+			"step": 0.5,
+			"sign": +1,
+			"radius": 0,
+
+			"posX": 0,
+			"posZ": 10,
+			"speed": 0.1,
+
+			"sense": 0.7,
+			"xAxisRotate": 0,
+			"yAxisRotate": 0
+		};
+
+		var startDimensions = natives.getScreenDimensions();
+
+		var startData = [
+			{"do": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
+			[
+				{"do": "setCamera", "x": 0, "y": 0, "z": 10},
+				{"do": "enableDepthTesting"},
+				{"do": "disableAlphaBlending"},
+				{"do": "rotate", "xa": 0, "ya": 0, "za": 0, "a": 0},
+				{"do": "translate", "x": 0, "y": 0, "z": 0},
+				[
+					{"do": "rotate", "xa": 0, "ya": 1, "za": 0, "a": 90},
+					{
+						"do": "renderOneColoredPolygons",
+						"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
+						"indices": [0,1,2, 3,0,2],
+						"r": 0.1, "g": 0.7, "b": 0.2, "alpha": 0.5
+					}
+				],
+				{
+					"do": "renderOneColoredLitPolygons",
+					"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
+					"indices": [0,1,2, 3,0,2],
+					"normals": [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1,-1,-1,1,1,1,1], //circly normals
+					// "normals": [0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1], //squary normals
+					"lightX":0, "lightY": 0, "lightZ": 5,
+					"r": 1, "g": 0, "b": 0, "alpha": 1
+				},
+				{"do": "enableAlphaBlending"},
+				[
+					{"do": "scale", "yScale": 2},
+					{"do": "translate", "x": -1},
+					{"do": "rotate", "ya": -1, "a": 90},
+					{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
+				],
+				[
+					{"do": "scale", "yScale": 2},
+					{"do": "translate", "x": 1},
+					{"do": "rotate", "ya": 1, "a": 90},
+					{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
+				],
+				[
+					{"do": "translate", "x": 0, "y": -2, "z": 0},
+					{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
+					{"do": "renderTexturedSquare", "textureLabel": "wireframe"}
+				],
+				[
+					{"do": "translate", "x": 0, "y": 2, "z": 0},
+					{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
+					{"do": "renderTexturedSquare", "textureLabel": "explosion"}
+				],
+				[
+					{"do": "scale", "yScale": 2},
+					{"do": "translate", "z": 1},
+					{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
+				],
+				[
+					{"do": "scale", "yScale": 2},
+					{"do": "translate", "x": 0, "y": 0, "z": -1},
+					{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
+				],
+			],
+			{"do": "setCamera", "x": 0, "y": 0, "z": 10},
+			{"do": "setCameraOrtho", "x": 0, "y": 0, "z": 10},
+			{"do": "disableDepthTesting"},
+			{"do": "enableAlphaBlending"},
+			[
+				{"do": "scale", "xScale": 20, "yScale": 20},
+				{"do": "translate", "x": -startDimensions[0]/2+20, "y": startDimensions[1]/2-20, "z": -10},
+				{"do": "renderText", "text": "Z"}
+			]
+		];
+
+		state.startData = startData;
+	}
 
 	userScriptFunctions.addInput = function(data) {
 		state.inputDataArray.push(data);
 	}
-
-	state.keysPressed = {};
-	state.inputs = {};
 
 	userScriptFunctions.processInput = function() {
 		var inputDataArray = state.inputDataArray;
@@ -57,68 +152,6 @@ function init(userScriptFunctions, natives) {
 			inputDataArray.splice(0, inputDataArray.length);
 		}
 	}
-
-
-
-	var startData = [
-		{"do": "clearScreen", "r": 0.1, "g": 0.2, "b": 0.3},
-		{"do": "setCamera", "x": 0, "y": 0, "z": 10},
-		{"do": "enableDepthTesting"},
-		{"do": "disableAlphaBlending"},
-		{"do": "rotate", "xa": 0, "ya": 0, "za": 0, "a": 0},
-		{"do": "translate", "x": 0, "y": 0, "z": 0},
-		[
-			{"do": "rotate", "xa": 0, "ya": 1, "za": 0, "a": 90},
-			{
-				"do": "renderOneColoredPolygons",
-				"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
-				"indices": [0,1,2, 3,0,2],
-				"r": 0.1, "g": 0.7, "b": 0.2, "alpha": 0.5
-			}
-		],
-		{
-			"do": "renderOneColoredLitPolygons",
-			"vertices": [-1,-1,0, 1,-1,0, 1,1,0, -1,1,0],
-			"indices": [0,1,2, 3,0,2],
-			"normals": [-1,-1,1, 1,-1,1, 1,1,1, -1,1,1,-1,-1,1,1,1,1], //circly normals
-			// "normals": [0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1], //squary normals
-			"lightX":0, "lightY": 0, "lightZ": 5,
-			"r": 1, "g": 0, "b": 0, "alpha": 1
-		},
-		{"do": "enableAlphaBlending"},
-		[
-			{"do": "scale", "yScale": 2},
-			{"do": "translate", "x": -1},
-			{"do": "rotate", "ya": -1, "a": 90},
-			{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
-		],
-		[
-			{"do": "scale", "yScale": 2},
-			{"do": "translate", "x": 1},
-			{"do": "rotate", "ya": 1, "a": 90},
-			{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
-		],
-		[
-			{"do": "translate", "x": 0, "y": -2, "z": 0},
-			{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
-			{"do": "renderTexturedSquare", "textureLabel": "wireframe"}
-		],
-		[
-			{"do": "translate", "x": 0, "y": 2, "z": 0},
-			{"do": "rotate", "xa": 1, "ya": 0, "za": 0, "a": 90},
-			{"do": "renderTexturedSquare", "textureLabel": "explosion"}
-		],
-		[
-			{"do": "scale", "yScale": 2},
-			{"do": "translate", "z": 1},
-			{"do": "renderScaledTexturedSquare", "textureLabel": "wireframe"}
-		],
-		[
-			{"do": "scale", "yScale": 2},
-			{"do": "translate", "x": 0, "y": 0, "z": -1},
-			{"do": "renderScaledTexturedSquare", "textureLabel": "explosion"}
-		]
-	];
 
 
 	var combineTransformations = function(current, propagated, destination) {
@@ -160,7 +193,7 @@ function init(userScriptFunctions, natives) {
 		return result;
 	}
 
-	function getDefaultTransformations() {
+	var getDefaultTransformations = function() {
 		return {"xScale":1, "yScale":1, "zScale": 1, "x": 0, "y": 0, "z": 0, "xa": 0, "ya": 0, "za": 0, "a": 0};
 	}
 
@@ -184,6 +217,10 @@ function init(userScriptFunctions, natives) {
 			}
 			else if (block.do === "setCamera") {
 				natives.setCamera(block.x || 0, block.y || 0, block.z || 0,
+				block.xa || 0, block.ya || 0, block.za || 0, block.a || 0);
+			}
+			else if (block.do === "setCameraOrtho") {
+				natives.setCameraOrtho(block.x || 0, block.y || 0, block.z || 0,
 				block.xa || 0, block.ya || 0, block.za || 0, block.a || 0);
 			}
 			else if (block.do === "enableDepthTesting") {
@@ -259,24 +296,25 @@ function init(userScriptFunctions, natives) {
 			else if (block.do === "translate" || block.do === "rotate" || block.do ===  "scale") {
 				combineTransformations(block, currentTransformations, currentTransformations);
 			}
+			else if (block.do === "renderText") {
+				var transformations = combineTransformations(currentTransformations, propagatedTransformations);
+
+				natives.renderText(
+					block.text,
+					transformations.xScale,
+					transformations.yScale,
+					transformations.zScale,
+					transformations.x,
+					transformations.y,
+					transformations.z,
+					transformations.xa,
+					transformations.ya,
+					transformations.za,
+					transformations.a);
+			}
 		};
 	};
 
-
-	state.delta = 90;
-	state.testAngle = 0;
-	state.angle = state.testAngle - state.delta;
-	state.step = 0.5;
-	state.sign = +1;
-	state.radius = 0;
-
-	state.posX = 0;
-	state.posZ = 10;
-	state.speed = 0.1;
-
-	state.sense = 0.75
-	state.xAxisRotate = 0;
-	state.yAxisRotate = 0;
 
 	userScriptFunctions.render = function() {
 		var radians = state.angle*Math.PI/180;
@@ -296,8 +334,9 @@ function init(userScriptFunctions, natives) {
 
 		var newCameraPosition = [0,0,0];
 
-		if (state.keysPressed["a"])
+		if (state.keysPressed["a"]) {
 			newCameraPosition[0] = -state.speed;
+		}
 		if (state.keysPressed["d"])
 			newCameraPosition[0] = state.speed;
 
@@ -348,8 +387,7 @@ function init(userScriptFunctions, natives) {
 		// newCameraPosition = [0,0,10];
 
 
-
-		var cameraNode = startData[1];
+		var cameraNode = state.startData[1][0];
 		cameraNode.x = newCameraPosition[0];
 		cameraNode.y = newCameraPosition[1];
 		cameraNode.z = newCameraPosition[2];
@@ -358,18 +396,18 @@ function init(userScriptFunctions, natives) {
 		cameraNode.za = cameraAxisAngle[2];
 		cameraNode.a = cameraAxisAngle[3];
 
-		var worldRotateNode = startData[4];
+		var worldRotateNode = state.startData[1][4];
 		worldRotateNode.xa = 1;
 		worldRotateNode.ya = -1;
 		worldRotateNode.za = 1;
 		worldRotateNode.a = state.angle;
 
-		var coloredLitPolygonsNode = startData[7];
+		var coloredLitPolygonsNode = state.startData[1][7];
 
 		coloredLitPolygonsNode.lightX = state.angle;
 		coloredLitPolygonsNode.lightZ = 5;
 
-		renderHelper(startData);
+		renderHelper(state.startData);
 	}
 }
 
