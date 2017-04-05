@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<title>Render the fonts!</title>
+
+		<style>
+			@font-face {
+				font-family: "Open Sans";
+				src: url(fonts/OpenSans-Regular.ttf) format("truetype");
+			}
+		</style>
+
+		<script>
+			window.onload = function() {
+				var counter = 20;
+				var squareSide = 300;
+
+				var canvas = document.querySelector('#canvas');
+				canvas.width = counter*squareSide;
+				canvas.height = counter*squareSide;
+
+				var ctx = canvas.getContext('2d', {"premultipliedAlpha": false});
+
+				ctx.globalAlpha = 0.0;
+				ctx.fillRect(0, 0, counter*squareSide, counter*squareSide);
+				ctx.globalAlpha = 1.0;
+				ctx.imageSmoothingEnabled = true;
+
+				ctx.font = '220px Open Sans';
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillColor = "#FFF";
+				// ctx.fillText('Hello world', 10, 50);
+
+				var text = "ABCDEFGHIJKLMNOPQRSTUWVXYZabcdefghijklmnopqrstuwvxyz";
+				text += "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+				text +="0123456789,.!?\"': _()/+-*&^%$#@`~;"
+
+				for (var i = 0; i < counter; i++) {
+					for (var j = 0; j < counter; j++) {
+						// ctx.strokeRect(j*squareSide, i*squareSide, squareSide, squareSide);
+						if (text[i*counter+j] === undefined)
+							break;
+
+						ctx.fillText(text[i*counter+j], squareSide/2 + j*squareSide, squareSide/2 + i*squareSide);
+					}
+				}
+
+				var imageData = ctx.getImageData(0,0, counter*squareSide,counter*squareSide),
+					startData = imageData.data;
+
+				for (var i = 0; i < startData.length; i+=4) {
+					var r = startData[i];
+					var g = startData[i +1];
+					var b = startData[i +2];
+					var a = startData[i +3];
+
+					if (a !== 255 && a !== 0) {
+						// startData[i] = 255;
+						// startData[i +1] = 255;
+						// startData[i +2] = 255;
+						// alert(r +", "+g+", "+b+", "+a);//startData[i +3] = Math.round((r+g+b)/3);
+					}
+				}
+				
+				ctx.putImageData(imageData, 0,0);
+			};
+		</script>
+
+	</head>
+
+	<body>
+		<canvas id="canvas" width="1000" height="1000"></canvas>
+	</body>
+</html>

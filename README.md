@@ -10,4 +10,8 @@ MIT License.
 
 # Supported platforms
 
- All new browser versions.
+ All new browser versions that allow to read files from folders.
+
+# Tools
+
+Some things are just easier with additional tools.
